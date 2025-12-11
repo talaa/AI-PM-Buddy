@@ -60,7 +60,7 @@ button {
 
 .btn-primary {
   background: var(--accent-gradient);
-  color: white;
+  color: rgb(238, 236, 243);
   box-shadow: var(--shadow-sm);
 }
 

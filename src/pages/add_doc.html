@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>AI PM Buddy - Project Dashboard</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "primary-light": "#eff6ff",
+                        "background-light": "#f6f6f8",
+                        "surface-light": "#ffffff",
+                        "text-main": "#1e293b",
+                        "text-secondary": "#64748b",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+
+<body class="bg-background-light text-slate-900 font-display overflow-hidden h-screen flex flex-col relative">
+    <div class="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+        <div
+            class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-[fadeIn_0.2s_ease-out]">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h2 class="text-xl font-bold text-slate-900">Add New Source</h2>
+                <button
+                    class="text-slate-400 hover:text-slate-600 transition-colors rounded-full p-1 hover:bg-slate-100">
+                    <span class="material-symbols-outlined text-[24px]">close</span>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <div
+                    class="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-primary/50 hover:bg-slate-50 transition-colors cursor-pointer group mb-6">
+                    <div
+                        class="size-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-[24px]">cloud_upload</span>
+                    </div>
+                    <h3 class="font-semibold text-slate-900 mb-1">Click to upload or drag and drop</h3>
+                    <p class="text-sm text-slate-500">PDF, DOCX, XLSX, or EML (max. 10MB)</p>
+                </div>
+                <div class="space-y-4">
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">Document Details</h3>
+                    <div class="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div
+                            class="size-10 flex items-center justify-center bg-white rounded border border-slate-200 text-red-500">
+                            <span class="material-symbols-outlined">picture_as_pdf</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-slate-900 truncate">Construction_Safety_Plan_2026.pdf
+                            </div>
+                            <div class="text-xs text-slate-500">4.2 MB • Ready to tag</div>
+                        </div>
+                        <button class="text-slate-400 hover:text-red-500">
+                            <span class="material-symbols-outlined text-[20px]">delete</span>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Category (Genre)</label>
+                            <select
+                                class="w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary text-slate-700">
+                                <option>Contracts</option>
+                                <option>Financials</option>
+                                <option>Technical Specs</option>
+                                <option>Correspondence</option>
+                                <option>Safety &amp; Compliance</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1.5">Document Status</label>
+                            <select
+                                class="w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary text-slate-700">
+                                <option>Draft</option>
+                                <option>Under Review</option>
+                                <option>Final / Signed</option>
+                                <option>Archived</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1.5">Tags</label>
+                        <div
+                            class="flex flex-wrap gap-2 p-2 border border-slate-200 rounded-lg min-h-[42px] focus-within:ring-1 focus-within:ring-primary focus-within:border-primary bg-white">
+                            <span
+                                class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-700">
+                                Safety
+                                <button class="hover:text-red-500"><span
+                                        class="material-symbols-outlined text-[14px]">close</span></button>
+                            </span>
+                            <span
+                                class="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-700">
+                                Compliance
+                                <button class="hover:text-red-500"><span
+                                        class="material-symbols-outlined text-[14px]">close</span></button>
+                            </span>
+                            <input class="border-none p-0 focus:ring-0 text-sm w-24 placeholder-slate-400"
+                                placeholder="Add tag..." type="text" />
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1.5">Press Enter to add a tag</p>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                    class="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors">Cancel</button>
+                <button
+                    class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/30">
+                    Add Source
+                </button>
+            </div>
+        </div>
+    </div>
+    <header
+        class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 px-6 py-3 bg-white shrink-0 z-20">
+        <div class="flex items-center gap-4 text-slate-900">
+            <div class="size-8 text-primary">
+                <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M42.4379 44C42.4379 44 36.0744 33.9038 41.1692 24C46.8624 12.9336 42.2078 4 42.2078 4L7.01134 4C7.01134 4 11.6577 12.932 5.96912 23.9969C0.876273 33.9029 7.27094 44 7.27094 44L42.4379 44Z"
+                        fill="currentColor"></path>
+                </svg>
+            </div>
+            <h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">AI PM Buddy</h2>
+        </div>
+        <div class="flex flex-1 justify-end gap-6">
+            <div class="flex gap-2">
+                <button
+                    class="flex items-center justify-center rounded-lg h-9 w-9 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">notifications</span>
+                </button>
+                <button
+                    class="flex items-center justify-center rounded-lg h-9 w-9 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">settings</span>
+                </button>
+                <button
+                    class="flex items-center justify-center rounded-lg h-9 w-9 bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">help</span>
+                </button>
+            </div>
+            <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-9 border border-slate-200"
+                data-alt="User profile picture showing a professional headshot"
+                style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDq9nBo0HprxXKdIRDMn8FqgyBEOUgqH8b_jRngE9w-Gw3hx2OD3OQ8T8ickwb-5W3Hepk2X8gU5bknSzn0m_WFcXQfRpin4RC3Qvvr-iV4X8CsdBkNYKbR_6065rLQ-nVcqG2mNGUxmK6H1Pe5y0-h5RzjFwraAC6-qnknw0kj1dqqowk47-bN6qqHJ_6dwVS10j0xGbGxud4iYgcm4cdcS0MIv1kiYMy49eeSZHt5AuYUcMYnKJ4190ztFNXxHyqhk34mY72G2p7I");'>
+            </div>
+        </div>
+    </header>
+    <div class="bg-background-light px-6 pt-4 pb-2 shrink-0 overflow-y-auto max-h-[45vh]">
+        <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <div class="flex justify-between items-center mb-6">
+                <button
+                    class="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors text-sm font-medium">
+                    <span class="material-symbols-outlined text-[20px]">arrow_back</span>
+                    Back to Dashboard
+                </button>
+                <button
+                    class="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 text-primary px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-200">
+                    <span class="material-symbols-outlined text-[18px]">edit</span>
+                    Edit Project
+                </button>
+            </div>
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-900 mb-2">Saudi makeover</h1>
+                    <div class="flex items-center gap-4 text-slate-500 text-sm">
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[18px]">globe</span>
+                            Saudi Arabia
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-[18px]">business_center</span>
+                            STC
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="block text-slate-500 text-sm mb-1">Currency</span>
+                    <div class="flex items-center justify-end gap-1.5 font-bold text-xl text-slate-900">
+                        <span class="material-symbols-outlined text-[24px]">credit_card</span>
+                        SAR
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-5 gap-4 mb-4">
+                <div
+                    class="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
+                    <div class="flex items-center gap-2 mb-3 text-primary font-semibold">
+                        <span class="material-symbols-outlined">calendar_today</span>
+                        Timeline
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <div class="text-slate-500 text-xs mb-0.5">Start Date</div>
+                            <div class="font-medium text-slate-900 text-sm">2026-01-01</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-500 text-xs mb-0.5">End Date</div>
+                            <div class="font-medium text-slate-900 text-sm">2027-06-01</div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
+                    <div class="flex items-center gap-2 mb-3 text-primary font-semibold">
+                        <span class="material-symbols-outlined">group</span>
+                        Admins
+                    </div>
+                    <div>
+                        <span
+                            class="inline-block w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 truncate mb-1"
+                            title="tamer.alaa@nokia.com">
+                            tamer.alaa@nokia.com
+                        </span>
+                        <span
+                            class="inline-block w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 truncate"
+                            title="sarah.smith@stc.sa">
+                            sarah.smith@stc.sa
+                        </span>
+                    </div>
+                </div>
+                <div
+                    class="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
+                    <div class="flex items-center gap-2 mb-3 text-primary font-semibold">
+                        <span class="material-symbols-outlined">attach_money</span>
+                        Cost
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <div class="text-slate-500 text-xs mb-0.5">Total Budget</div>
+                            <div class="font-medium text-slate-900 text-sm">$2,450,000</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-500 text-xs mb-0.5">Spent</div>
+                            <div class="font-medium text-slate-900 text-sm flex items-center justify-between">
+                                $840,000
+                                <span class="text-xs text-green-600 font-normal">34%</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-1.5 mt-1">
+                                <div class="bg-green-500 h-1.5 rounded-full" style="width: 34%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
+                    <div class="flex items-center gap-2 mb-3 text-primary font-semibold">
+                        <span class="material-symbols-outlined">rocket_launch</span>
+                        Roll-out
+                    </div>
+                    <div class="flex flex-col items-center justify-center h-[calc(100%-2rem)]">
+                        <div class="relative size-16 mb-2">
+                            <svg class="size-full" viewBox="0 0 36 36">
+                                <path class="text-slate-200"
+                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                    fill="none" stroke="currentColor" stroke-width="3"></path>
+                                <path class="text-primary"
+                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                    fill="none" stroke="currentColor" stroke-dasharray="62, 100" stroke-width="3">
+                                </path>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center flex-col">
+                                <span class="text-sm font-bold text-slate-900">62%</span>
+                            </div>
+                        </div>
+                        <div class="text-xs text-slate-500">Completion</div>
+                    </div>
+                </div>
+                <div
+                    class="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
+                    <div class="flex items-center gap-2 mb-3 text-primary font-semibold">
+                        <span class="material-symbols-outlined">health_and_safety</span>
+                        Health
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Overall</span>
+                            <span
+                                class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold uppercase">Good</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Risks</span>
+                            <span
+                                class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-bold uppercase">Medium</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Quality</span>
+                            <span
+                                class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold uppercase">High</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <main class="flex-1 flex overflow-hidden p-4 gap-4 pt-2">
+        <aside
+            class="flex flex-col w-[320px] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden shrink-0">
+            <div class="p-4 border-b border-slate-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-slate-800 text-lg">Sources</h3>
+                    <button
+                        class="flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                        <span class="material-symbols-outlined text-[20px]">add</span>
+                    </button>
+                </div>
+                <div class="relative">
+                    <span
+                        class="material-symbols-outlined absolute left-2.5 top-2 text-slate-400 text-[18px]">search</span>
+                    <input
+                        class="w-full bg-slate-50 text-sm text-slate-900 rounded-lg pl-9 pr-3 py-2 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-primary placeholder-slate-400 outline-none"
+                        placeholder="Search sources..." type="text" />
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                <div class="px-2 pt-3 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Contracts
+                </div>
+                <div
+                    class="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200">
+                    <div class="mt-0.5">
+                        <input checked=""
+                            class="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4"
+                            type="checkbox" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="material-symbols-outlined text-red-500 text-[18px]">picture_as_pdf</span>
+                            <span class="text-sm font-medium text-slate-700 truncate">Master_Contract_v2.pdf</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="px-1.5 py-0.5 bg-slate-100 text-[10px] rounded text-slate-500 font-medium">PDF</span>
+                            <span class="text-[10px] text-slate-400">2.4 MB</span>
+                            <span
+                                class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">Signed</span>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200">
+                    <div class="mt-0.5">
+                        <input
+                            class="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4"
+                            type="checkbox" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="material-symbols-outlined text-blue-500 text-[18px]">description</span>
+                            <span class="text-sm font-medium text-slate-700 truncate">Alpha_Tower_SOW.docx</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="px-1.5 py-0.5 bg-slate-100 text-[10px] rounded text-slate-500 font-medium">DOCX</span>
+                            <span class="text-[10px] text-slate-400">1.1 MB</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-2 pt-3 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Financials
+                </div>
+                <div
+                    class="group flex items-start gap-3 p-2.5 rounded-lg bg-primary/5 border border-primary/20 cursor-pointer transition-colors">
+                    <div class="mt-0.5">
+                        <input checked=""
+                            class="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4"
+                            type="checkbox" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="material-symbols-outlined text-green-600 text-[18px]">table_chart</span>
+                            <span class="text-sm font-medium text-slate-700 truncate">Q3_Budget_BOQ.xlsx</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="px-1.5 py-0.5 bg-slate-100 text-[10px] rounded text-slate-500 font-medium">XLSX</span>
+                            <span class="text-[10px] text-slate-400">850 KB</span>
+                            <span class="text-[10px] text-primary font-medium">Active Context</span>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200">
+                    <div class="mt-0.5">
+                        <input
+                            class="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4"
+                            type="checkbox" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="material-symbols-outlined text-orange-400 text-[18px]">mail</span>
+                            <span class="text-sm font-medium text-slate-700 truncate">Vendor_Quote_Steel.eml</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="px-1.5 py-0.5 bg-slate-100 text-[10px] rounded text-slate-500 font-medium">EMAIL</span>
+                            <span class="text-[10px] text-slate-400">Yesterday</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-3 border-t border-slate-100 text-center">
+                <p class="text-xs text-slate-500">2 sources selected • 12 total</p>
+            </div>
+        </aside>
+        <section
+            class="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+            <div
+                class="absolute top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b border-slate-100 px-6 flex items-center justify-between z-10">
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2 text-xs font-medium mb-1">
+                        <a class="text-slate-500 hover:text-primary transition-colors" href="#">Projects</a>
+                        <span class="text-slate-400">/</span>
+                        <span class="text-slate-900">Alpha Tower</span>
+                    </div>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">Alpha Tower Construction</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button
+                        class="p-2 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-100">
+                        <span class="material-symbols-outlined text-[20px]">ios_share</span>
+                    </button>
+                    <button
+                        class="p-2 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-100">
+                        <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto pt-20 pb-24 px-4 sm:px-8 md:px-16 lg:px-24">
+                <div class="flex justify-center mb-8">
+                    <span class="px-3 py-1 bg-slate-100 rounded-full text-xs font-medium text-slate-500">Today, October
+                        24</span>
+                </div>
+                <div class="flex gap-4 mb-8">
+                    <div
+                        class="size-8 rounded-full bg-gradient-to-br from-primary to-blue-400 shrink-0 flex items-center justify-center shadow-lg shadow-primary/20">
+                        <span class="material-symbols-outlined text-white text-[18px]">smart_toy</span>
+                    </div>
+                    <div class="flex-1 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-bold text-slate-900">PM Buddy</span>
+                            <span class="text-xs text-slate-400">10:42 AM</span>
+                        </div>
+                        <div class="text-slate-700 leading-relaxed text-[15px]">
+                            <p class="mb-2">Hello! I've analyzed the newly uploaded <strong>Q3_Budget_BOQ.xlsx</strong>.
+                                It seems like we are projecting a variance in the concrete supply costs.</p>
+                            <p>Here is a quick summary:</p>
+                            <ul class="list-disc pl-5 space-y-1 mt-2 mb-2">
+                                <li><strong>Budgeted:</strong> $1.2M</li>
+                                <li><strong>Projected:</strong> $1.35M (+12.5%)</li>
+                                <li><strong>Source:</strong> Row 45, Column F</li>
+                            </ul>
+                            <p>Would you like me to draft an email to the supplier or update the risk register?</p>
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <button
+                                class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-xs font-medium text-slate-700 transition-colors border border-slate-200">
+                                <span class="material-symbols-outlined text-[16px]">mail</span>
+                                Draft Email
+                            </button>
+                            <button
+                                class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-xs font-medium text-slate-700 transition-colors border border-slate-200">
+                                <span class="material-symbols-outlined text-[16px]">warning</span>
+                                Update Risk Register
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-4 flex-row-reverse mb-8">
+                    <div class="size-8 rounded-full bg-slate-200 shrink-0 overflow-hidden"
+                        style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDqAqS9lw_AmCeFWGyhoRPtCIMkLzznHiUkwA8liBeBG7SIk9OFwOycwmR-Wan_yh8ZC9NqclXtoL4tjNjRUf_gxKeprxiLCeiAwNjqsuhPFD_e6oR-JwhLfXF8dyrYFntm0JfLsxh79wRAF_ddrnP8bpHskasoH0uy-r6vMpNrfFRHESZADRSBrD_HfAXOend0mxSab45bZq75HUC6Tp2FlsZxGtCyZIvBO4WFiTuoVDUSte7uIH89Oc4CZ9bsa4C3hy2s2fNpJJWB"); background-size: cover;'>
+                    </div>
+                    <div class="flex-1 space-y-2 text-right">
+                        <div class="flex items-center gap-2 justify-end">
+                            <span class="text-xs text-slate-400">10:45 AM</span>
+                            <span class="text-sm font-bold text-slate-900">You</span>
+                        </div>
+                        <div
+                            class="inline-block bg-primary text-white p-3.5 rounded-2xl rounded-tr-sm text-left leading-relaxed text-[15px] shadow-md shadow-primary/10">
+                            <p>Check the contract for penalty clauses regarding material cost increases. Specifically
+                                section 4.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-4 mb-4">
+                    <div
+                        class="size-8 rounded-full bg-gradient-to-br from-primary to-blue-400 shrink-0 flex items-center justify-center animate-pulse">
+                        <span class="material-symbols-outlined text-white text-[18px]">smart_toy</span>
+                    </div>
+                    <div class="flex-1 space-y-1 pt-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-bold text-slate-900">PM Buddy</span>
+                            <span class="text-xs text-slate-400 font-medium">Reading Master_Contract_v2.pdf...</span>
+                        </div>
+                        <div class="flex gap-2 mt-1">
+                            <span
+                                class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-slate-50 text-slate-500 border border-slate-200">
+                                <span class="material-symbols-outlined text-[12px]">link</span> Page 12
+                            </span>
+                            <span
+                                class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-slate-50 text-slate-500 border border-slate-200">
+                                <span class="material-symbols-outlined text-[12px]">link</span> Section 4.2
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div
+                class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent via-20%">
+                <div class="max-w-4xl mx-auto relative group">
+                    <div class="absolute -top-10 left-0 flex gap-2">
+                        <div
+                            class="px-3 py-1 bg-slate-800 backdrop-blur text-white text-xs rounded-full flex items-center gap-1 shadow-lg">
+                            <span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+                            <span>Using 2 sources</span>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-white border border-slate-200 rounded-2xl shadow-lg flex flex-col transition-all focus-within:ring-2 focus-within:ring-primary/50">
+                        <textarea
+                            class="w-full bg-transparent border-none text-slate-900 placeholder-slate-400 p-4 resize-none focus:ring-0 max-h-32 text-[15px]"
+                            placeholder="Ask anything about your project..." rows="1"></textarea>
+                        <div class="flex justify-between items-center px-2 pb-2">
+                            <div class="flex gap-1">
+                                <button
+                                    class="p-2 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-lg transition-colors"
+                                    title="Attach file">
+                                    <span class="material-symbols-outlined text-[20px]">attach_file</span>
+                                </button>
+                                <button
+                                    class="p-2 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-lg transition-colors"
+                                    title="Voice input">
+                                    <span class="material-symbols-outlined text-[20px]">mic</span>
+                                </button>
+                            </div>
+                            <button
+                                class="flex items-center justify-center size-9 bg-primary hover:bg-blue-600 text-white rounded-xl shadow-md shadow-primary/20 transition-all transform active:scale-95">
+                                <span class="material-symbols-outlined text-[20px]">arrow_upward</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-center mt-2">
+                        <p class="text-[10px] text-slate-400">AI PM Buddy can make mistakes. Verify important
+                            information.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <aside class="flex flex-col w-[300px] gap-4 shrink-0">
+            <div class="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-800 text-lg">Agents &amp; Tools</h3>
+                    <button class="text-slate-400 hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-[20px]">grid_view</span>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-3 space-y-3">
+                    <div
+                        class="bg-slate-50 p-3 rounded-xl border border-slate-200 relative overflow-hidden group hover:border-primary/50 transition-colors">
+                        <div class="absolute top-3 right-3 flex gap-2">
+                            <div
+                                class="flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 text-green-600 rounded text-[10px] font-bold uppercase tracking-wider border border-green-500/20">
+                                <div class="size-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                Active
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mb-3">
+                            <div
+                                class="size-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                                <span class="material-symbols-outlined">attach_money</span>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-slate-900">Budget Buddy</h4>
+                                <p class="text-xs text-slate-500">Monitoring variance</p>
+                            </div>
+                        </div>
+                        <div class="text-xs text-slate-600 mb-3 bg-white p-2 rounded border border-slate-200">
+                            Found 12.5% variance in Q3 Concrete supply.
+                        </div>
+                        <button
+                            class="w-full py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors border border-indigo-100">
+                            View Report
+                        </button>
+                    </div>
+                    <div
+                        class="bg-slate-50 p-3 rounded-xl border border-slate-200 relative group hover:border-slate-400 transition-colors">
+                        <div class="absolute top-3 right-3">
+                            <div
+                                class="px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[10px] font-bold uppercase tracking-wider">
+                                Idle
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <div
+                                class="size-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100">
+                                <span class="material-symbols-outlined">radar</span>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-slate-900">Risk Radar</h4>
+                                <p class="text-xs text-slate-500">Scanning emails</p>
+                            </div>
+                        </div>
+                        <button
+                            class="w-full mt-2 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:text-primary hover:border-primary/50 transition-colors">
+                            Run Scan
+                        </button>
+                    </div>
+                    <div
+                        class="bg-slate-50 p-3 rounded-xl border border-slate-200 relative group hover:border-slate-400 transition-colors">
+                        <div class="absolute top-3 right-3">
+                            <div
+                                class="px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[10px] font-bold uppercase tracking-wider">
+                                Idle
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <div
+                                class="size-10 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-100">
+                                <span class="material-symbols-outlined">calendar_month</span>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-slate-900">Scheduler</h4>
+                                <p class="text-xs text-slate-500">Timeline mgmt</p>
+                            </div>
+                        </div>
+                        <button
+                            class="w-full mt-2 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:text-primary hover:border-primary/50 transition-colors">
+                            Check Conflicts
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+</body>
+
+</html>
