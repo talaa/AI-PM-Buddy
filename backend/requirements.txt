@@ -1,0 +1,21 @@
+fastapi
+uvicorn
+python-dotenv
+supabase
+ollama
+pydantic
+
+
+# LangChain dependencies
+langchain
+langchain-community
+langchain-core
+
+
+
+# For RAG
+chromadb
+tiktoken
+
+# Optional but recommended
+redis  # For production memory management

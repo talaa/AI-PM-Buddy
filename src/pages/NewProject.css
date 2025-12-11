@@ -1,0 +1,19 @@
+.new-project-page {
+    padding-top: 120px;
+    /* Increased from default pt-24 (approx 96px) */
+    padding-bottom: 4rem;
+    min-height: 100vh;
+    background-color: var(--bg-secondary);
+}
+
+.new-project-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    /* Add horizontal padding */
+}
+
+.new-project-content {
+    margin-top: 2rem;
+    /* Add margin between title and content */
+}
