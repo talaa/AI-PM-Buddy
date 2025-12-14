@@ -30,3 +30,6 @@ class UpdateAgent(BaseModel):
     #temperature: Optional[float] = None
     #max_tokens: Optional[int] = None
 
+class FolderCreationRequest(BaseModel):
+    path: str
+

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bot, User, Settings, LogOut, Plus, LayoutDashboard } from 'lucide-react';
+import { Bot, User, Settings, LogOut, Plus, LayoutDashboard, ChevronDown, Package } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import './Navbar.css';
 
@@ -8,6 +8,7 @@ const Navbar = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [showManagementMenu, setShowManagementMenu] = useState(false);
 
     useEffect(() => {
         // Check active session
@@ -48,6 +49,30 @@ const Navbar = () => {
                                 <Bot size={18} />
                                 <span>Agents</span>
                             </Link>
+                            
+
+                            <div className="relative">
+                                <button
+                                    className="nav-link flex items-center gap-1"
+                                    onClick={() => setShowManagementMenu(!showManagementMenu)}
+                                >
+                                    <span>Management</span>
+                                    <ChevronDown size={14} />
+                                </button>
+
+                                {showManagementMenu && (
+                                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-[var(--border-color)] py-1 z-50">
+                                        <Link
+                                            to="/inventory"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                                            onClick={() => setShowManagementMenu(false)}
+                                        >
+                                            <Package size={16} />
+                                            <span>Inventory Management</span>
+                                        </Link>
+                                    </div>
+                                )}
+                            </div>
                             <Link to="/new-project" className="nav-link flex items-center gap-2">
                                 <Plus size={18} />
                                 <span>New Project</span>

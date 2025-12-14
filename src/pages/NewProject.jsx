@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import './NewProject.css';
@@ -14,7 +14,8 @@ const NewProject = () => {
         forecast_end_date: '',
         currency: '',
         scope: '',
-        admins: ''
+        admins: '',
+        sharepoint_folder_path: ''
     });
 
     const handleChange = (e) => {
@@ -52,13 +53,44 @@ const NewProject = () => {
                         currency: formData.currency,
                         scope: formData.scope,
                         admins: adminsArray,
+                        sharepoint_folder_path: formData.sharepoint_folder_path,
                         user_id: user.id
                     }
                 ]);
 
             if (error) throw error;
 
-            alert('Project created successfully!');
+            if (error) throw error;
+
+            console.log("Supabase entry created, attempting backend folder creation...");
+
+            // Create Folders via Backend if path is provided
+            if (formData.sharepoint_folder_path) {
+                try {
+                    const response = await fetch('http://localhost:8000/api/folders/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            path: formData.sharepoint_folder_path
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Failed to create folders');
+                    }
+
+                    alert('Project and local folders created successfully!');
+                } catch (folderError) {
+                    console.error("Folder Creation Error:", folderError);
+                    alert('Project created in DB, but folder creation failed: ' + folderError.message);
+                }
+            } else {
+                alert('Project created successfully (No folder path provided).');
+            }
+
             navigate('/dashboard');
         } catch (error) {
             console.error('Error creating project:', error);
@@ -179,6 +211,25 @@ const NewProject = () => {
                             className="w-full px-4 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
                             placeholder="admin1@example.com, admin2@example.com"
                         />
+                    </div>
+
+                    {/* Local Project Path */}
+                    <div>
+                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                            Local Project Path
+                        </label>
+                        <input
+                            type="text"
+                            name="sharepoint_folder_path"
+                            value={formData.sharepoint_folder_path}
+                            onChange={handleChange}
+                            className="w-full px-4 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
+                            placeholder="C:\Users\YourName\OneDrive\ProjectFolder"
+                        />
+                        <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2 text-yellow-800 text-sm">
+                            <span className="font-semibold">Note:</span>
+                            <span>Please Sync this local Path with your Sharepoint Folder Path.</span>
+                        </div>
                     </div>
 
                     {/* Scope */}

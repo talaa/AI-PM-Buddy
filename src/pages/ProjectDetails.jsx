@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
 const ProjectDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+
+    // --- Project Data State ---
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -14,10 +16,26 @@ const ProjectDetails = () => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [showAddSourceModal, setShowAddSourceModal] = useState(false);
 
+    // --- Upload / Documents State ---
+    const [documents, setDocuments] = useState([]);
+    const [openCategories, setOpenCategories] = useState({});
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [sourceData, setSourceData] = useState({
+        category: 'Contracts',
+        status: 'Draft',
+    });
+    const [tags, setTags] = useState([]);
+    const [tagInput, setTagInput] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef(null);
+
+    // --- Initialization ---
     useEffect(() => {
         fetchProjectDetails();
+        fetchDocuments();
     }, [id]);
 
+    // --- Fetchers ---
     const fetchProjectDetails = async () => {
         try {
             setLoading(true);
@@ -38,9 +56,59 @@ const ProjectDetails = () => {
         }
     };
 
+    const fetchDocuments = async () => {
+        const { data, error } = await supabase
+            .from('project_documents')
+            .select('*')
+            .eq('project_id', id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching documents:', error);
+        } else {
+            setDocuments(data || []);
+            // Initialize all categories as open by default
+            const cats = {};
+            (data || []).forEach(d => cats[d.category] = true);
+            setOpenCategories(cats);
+        }
+    };
+
+    // --- Helpers ---
+    const groupedDocuments = documents.reduce((acc, doc) => {
+        const cat = doc.category || 'Uncategorized';
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(doc);
+        return acc;
+    }, {});
+
+    const formatFileSize = (bytes) => {
+        if (!bytes) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
+    const getFileIcon = (filename) => {
+        const ext = filename.split('.').pop().toLowerCase();
+        if (ext === 'pdf') return { icon: 'picture_as_pdf', color: 'text-red-500', label: 'PDF' };
+        if (['doc', 'docx'].includes(ext)) return { icon: 'description', color: 'text-blue-500', label: 'DOCX' };
+        if (['xls', 'xlsx', 'csv'].includes(ext)) return { icon: 'table_view', color: 'text-green-500', label: 'XLSX' };
+        return { icon: 'insert_drive_file', color: 'text-slate-400', label: ext.toUpperCase() };
+    };
+
+    const toggleCategory = (cat) => {
+        setOpenCategories(prev => ({
+            ...prev,
+            [cat]: !prev[cat]
+        }));
+    };
+
+    // --- Project Editing Handlers ---
     const handleEdit = () => {
         setIsEditing(true);
-        setIsCollapsed(false); // Make sure it expands when editing
+        setIsCollapsed(false);
         setFormData({
             ...project,
             admins: Array.isArray(project.admins) ? project.admins.join(', ') : (project.admins || '')
@@ -88,15 +156,135 @@ const ProjectDetails = () => {
         }
     };
 
+    // --- Upload Handlers ---
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            setSelectedFile(e.target.files[0]);
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            setSelectedFile(e.dataTransfer.files[0]);
+        }
+    };
+
+    const handleRemoveFile = () => {
+        setSelectedFile(null);
+    };
+
+    const handleTagKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = tagInput.trim();
+            if (val && !tags.includes(val)) {
+                setTags([...tags, val]);
+                setTagInput('');
+            }
+        }
+    };
+
+    const removeTag = (tagToRemove) => {
+        setTags(tags.filter(tag => tag !== tagToRemove));
+    };
+
+    const handleAddSource = async () => {
+        if (!selectedFile) {
+            alert("Please select a file first.");
+            return;
+        }
+
+        try {
+            setUploading(true);
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                alert("You must be logged in to upload files.");
+                return;
+            }
+
+            const uploadFormData = new FormData();
+            uploadFormData.append('file', selectedFile);
+            uploadFormData.append('project_id', id);
+            uploadFormData.append('user_id', user.id);
+            uploadFormData.append('category', sourceData.category);
+            uploadFormData.append('status', sourceData.status);
+            uploadFormData.append('tags', tags.join(', '));
+
+            const response = await fetch('http://localhost:8000/api/documents/upload', {
+                method: 'POST',
+                body: uploadFormData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Upload failed');
+            }
+
+            const result = await response.json();
+            console.log("Upload success:", result);
+            alert("File uploaded successfully!");
+
+            setSelectedFile(null);
+            setTags([]);
+            setTagInput('');
+            setShowAddSourceModal(false);
+            fetchDocuments(); // Refresh list
+
+        } catch (error) {
+            console.error("Upload error:", error);
+            alert("Error uploading file: " + error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleDeleteDocument = async (docId, e) => {
+        e.stopPropagation(); // Prevent triggering the row click
+
+        if (!window.confirm("Are you sure you want to delete this document? This will remove it from the database and your local folder.")) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`http://localhost:8000/api/documents/${docId}`, {
+                method: 'DELETE',
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Delete failed');
+            }
+
+            console.log("Delete success");
+            // Optimistically update or re-fetch
+            fetchDocuments();
+
+        } catch (error) {
+            console.error("Delete error:", error);
+            alert("Error deleting file: " + error.message);
+        }
+    };
+
     if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
     if (!project) return <div className="p-8 text-center text-slate-500">Project not found</div>;
 
     return (
         <div className="bg-background-light text-slate-900 font-display flex flex-col h-[calc(100vh-64px)] overflow-hidden">
-            {/* Project Details Section */}
+            {/* Project Details Header Section */}
             <div className={`bg-background-light px-6 pt-4 pb-2 shrink-0 transition-all duration-300 ${isCollapsed ? '' : 'overflow-y-auto max-h-[45vh]'}`}>
-                {/* Back Button - Outside Card */}
                 <button
                     onClick={() => navigate('/dashboard')}
                     className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors text-sm font-medium mb-3 ml-1"
@@ -106,7 +294,6 @@ const ProjectDetails = () => {
                 </button>
 
                 <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-300">
-                    {/* Header: Name (Left) -- Actions + Currency + Collapse (Right) */}
                     <div className="flex justify-between items-start">
                         <div className="flex-1 mr-8">
                             {isEditing ? (
@@ -124,7 +311,6 @@ const ProjectDetails = () => {
                         </div>
 
                         <div className="flex items-center gap-6">
-                            {/* Edit/Save Actions */}
                             {isEditing ? (
                                 <div className="flex gap-2">
                                     <button
@@ -154,7 +340,6 @@ const ProjectDetails = () => {
                                 </button>
                             )}
 
-                            {/* Currency */}
                             <div className="text-right">
                                 {isEditing ? (
                                     <input
@@ -174,7 +359,6 @@ const ProjectDetails = () => {
                                 )}
                             </div>
 
-                            {/* Collapse Toggle */}
                             <button
                                 onClick={() => setIsCollapsed(!isCollapsed)}
                                 className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -186,10 +370,8 @@ const ProjectDetails = () => {
                         </div>
                     </div>
 
-                    {/* Collapsible Body */}
                     {!isCollapsed && (
                         <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                            {/* Country & CT Name */}
                             <div className="mb-6">
                                 {isEditing ? (
                                     <div className="flex gap-4 max-w-2xl">
@@ -229,7 +411,6 @@ const ProjectDetails = () => {
                                     </div>
                                 )}
                             </div>
-
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-5 gap-4">
@@ -299,7 +480,7 @@ const ProjectDetails = () => {
                                     </div>
                                 </div>
 
-                                {/* Static Sections from Pro.html (Cost, Roll-out, Health) */}
+                                {/* Cost */}
                                 <div className="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
                                     <div className="flex items-center gap-2 mb-3 text-primary font-semibold">
                                         <span className="material-symbols-outlined">attach_money</span>
@@ -323,6 +504,7 @@ const ProjectDetails = () => {
                                     </div>
                                 </div>
 
+                                {/* Roll-out */}
                                 <div className="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
                                     <div className="flex items-center gap-2 mb-3 text-primary font-semibold">
                                         <span className="material-symbols-outlined">rocket_launch</span>
@@ -342,6 +524,7 @@ const ProjectDetails = () => {
                                     </div>
                                 </div>
 
+                                {/* Health */}
                                 <div className="bg-slate-50 rounded-lg p-4 col-span-1 border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all">
                                     <div className="flex items-center gap-2 mb-3 text-primary font-semibold">
                                         <span className="material-symbols-outlined">health_and_safety</span>
@@ -386,33 +569,73 @@ const ProjectDetails = () => {
                             <input className="w-full bg-slate-50 text-sm text-slate-900 rounded-lg pl-9 pr-3 py-2 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-primary placeholder-slate-400 outline-none" placeholder="Search sources..." type="text" />
                         </div>
                     </div>
+
                     <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                        <div className="px-2 pt-3 pb-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">Contracts</div>
-                        {['Master_Contract_v2.pdf', 'Alpha_Tower_SOW.docx'].map((file, i) => (
-                            <div key={i} className="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200">
-                                <div className="mt-0.5">
-                                    <input type="checkbox" className="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4" defaultChecked={i === 0} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-0.5">
-                                        <span className={`material-symbols-outlined text-[18px] ${i === 0 ? 'text-red-500' : 'text-blue-500'}`}>{i === 0 ? 'picture_as_pdf' : 'description'}</span>
-                                        <span className="text-sm font-medium text-slate-700 truncate">{file}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="px-1.5 py-0.5 bg-slate-100 text-[10px] rounded text-slate-500 font-medium">{i === 0 ? 'PDF' : 'DOCX'}</span>
-                                        <span className="text-[10px] text-slate-400">2.4 MB</span>
-                                        {i === 0 && <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">Signed</span>}
-                                    </div>
-                                </div>
+                        {Object.keys(groupedDocuments).length === 0 ? (
+                            <div className="text-center py-8 text-slate-400 text-sm">
+                                No documents yet.
                             </div>
-                        ))}
+                        ) : (
+                            Object.entries(groupedDocuments).map(([category, docs]) => (
+                                <div key={category} className="mb-2">
+                                    <div
+                                        onClick={() => toggleCategory(category)}
+                                        className="flex items-center justify-between px-2 py-2 cursor-pointer hover:bg-slate-50 rounded text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                                    >
+                                        <span>{category}</span>
+                                        <span className="material-symbols-outlined text-[16px]">
+                                            {openCategories[category] !== false ? 'expand_more' : 'chevron_right'}
+                                        </span>
+                                    </div>
+
+                                    {openCategories[category] !== false && (
+                                        <div className="space-y-1">
+                                            {docs.map((doc, i) => {
+                                                const fileInfo = getFileIcon(doc.filename);
+                                                return (
+                                                    <div key={doc.id || i} className="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200">
+                                                        <div className="mt-0.5">
+                                                            <input type="checkbox" className="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                <span className={`material-symbols-outlined text-[18px] ${fileInfo.color}`}>{fileInfo.icon}</span>
+                                                                <span className="text-sm font-medium text-slate-700 truncate" title={doc.filename}>{doc.filename}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="px-1.5 py-0.5 bg-slate-100 text-[10px] rounded text-slate-500 font-medium">{fileInfo.label}</span>
+                                                                <span className="text-[10px] text-slate-400">{formatFileSize(doc.file_size)}</span>
+                                                                {doc.status === 'Final / Signed' && (
+                                                                    <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">Signed</span>
+                                                                )}
+                                                                {(doc.tags || []).map((tag, tIndex) => (
+                                                                    <span key={tIndex} className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{tag}</span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => handleDeleteDocument(doc.id, e)}
+                                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                                                            title="Delete Source"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
                     </div>
+
                     <div className="p-3 border-t border-slate-100 text-center">
-                        <p className="text-xs text-slate-500">2 sources selected • 12 total</p>
+                        <p className="text-xs text-slate-500">{documents.length} sources total</p>
                     </div>
                 </aside>
 
-                {/* Chat Section */}
+                {/* Chat Interface */}
                 <section className="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b border-slate-100 px-6 flex items-center justify-between z-10">
                         <div className="flex flex-col">
@@ -515,7 +738,7 @@ const ProjectDetails = () => {
                                         <span className="material-symbols-outlined">attach_money</span>
                                     </div>
                                     <div>
-                                        <h4 class="text-sm font-bold text-slate-900">Budget Buddy</h4>
+                                        <h4 className="text-sm font-bold text-slate-900">Budget Buddy</h4>
                                         <p className="text-xs text-slate-500">Monitoring variance</p>
                                     </div>
                                 </div>
@@ -526,7 +749,6 @@ const ProjectDetails = () => {
                                     View Report
                                 </button>
                             </div>
-                            {/* More agents can go here */}
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 relative group hover:border-slate-400 transition-colors">
                                 <div className="absolute top-3 right-3">
                                     <div className="px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[10px] font-bold uppercase tracking-wider">
@@ -565,41 +787,78 @@ const ProjectDetails = () => {
                             </button>
                         </div>
                         <div className="p-6 overflow-y-auto">
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-primary/50 hover:bg-slate-50 transition-colors cursor-pointer group mb-6">
+                            {/* Hidden File Input */}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                                accept=".pdf,.docx,.xlsx,.eml"
+                            />
+
+                            {/* Drop Zone */}
+                            <div
+                                onClick={handleUploadClick}
+                                onDragOver={handleDragOver}
+                                onDrop={handleDrop}
+                                className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-primary/50 hover:bg-slate-50 transition-colors cursor-pointer group mb-6"
+                            >
                                 <div className="size-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
                                     <span className="material-symbols-outlined text-[24px]">cloud_upload</span>
                                 </div>
-                                <h3 className="font-semibold text-slate-900 mb-1">Click to upload or drag and drop</h3>
+                                <h3 className="font-semibold text-slate-900 mb-1">
+                                    {selectedFile ? 'Change File' : 'Click to upload or drag and drop'}
+                                </h3>
                                 <p className="text-sm text-slate-500">PDF, DOCX, XLSX, or EML (max. 10MB)</p>
                             </div>
+
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">Document Details</h3>
-                                <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                                    <div className="size-10 flex items-center justify-center bg-white rounded border border-slate-200 text-red-500">
-                                        <span className="material-symbols-outlined">picture_as_pdf</span>
+
+                                {selectedFile && (
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                        <div className="size-10 flex items-center justify-center bg-white rounded border border-slate-200 text-red-500">
+                                            <span className="material-symbols-outlined">
+                                                {selectedFile.type.includes('pdf') ? 'picture_as_pdf' : 'description'}
+                                            </span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-slate-900 truncate">{selectedFile.name}</div>
+                                            <div className="text-xs text-slate-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB • Ready to tag</div>
+                                        </div>
+                                        <button
+                                            onClick={handleRemoveFile}
+                                            className="text-slate-400 hover:text-red-500"
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">delete</span>
+                                        </button>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-medium text-slate-900 truncate">Construction_Safety_Plan_2026.pdf</div>
-                                        <div className="text-xs text-slate-500">4.2 MB • Ready to tag</div>
-                                    </div>
-                                    <button className="text-slate-400 hover:text-red-500">
-                                        <span className="material-symbols-outlined text-[20px]">delete</span>
-                                    </button>
-                                </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1.5">Category (Genre)</label>
-                                        <select className="w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary text-slate-700">
-                                            <option>Contracts</option>
-                                            <option>Financials</option>
-                                            <option>Technical Specs</option>
-                                            <option>Correspondence</option>
-                                            <option>Safety & Compliance</option>
+                                        <select
+                                            name="category"
+                                            value={sourceData.category}
+                                            onChange={(e) => setSourceData({ ...sourceData, category: e.target.value })}
+                                            className="w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary text-slate-700"
+                                        >
+                                            <option value="Contracts">Contracts</option>
+                                            <option value="Financials">Financials</option>
+                                            <option value="Technical Specs">Technical Specs</option>
+                                            <option value="Correspondence">Correspondence</option>
+                                            <option value="Safety & Compliance">Safety & Compliance</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1.5">Document Status</label>
-                                        <select className="w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary text-slate-700">
+                                        <select
+                                            name="status"
+                                            value={sourceData.status}
+                                            onChange={(e) => setSourceData({ ...sourceData, status: e.target.value })}
+                                            className="w-full rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary text-slate-700"
+                                        >
                                             <option>Draft</option>
                                             <option>Under Review</option>
                                             <option>Final / Signed</option>
@@ -610,15 +869,25 @@ const ProjectDetails = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1.5">Tags</label>
                                     <div className="flex flex-wrap gap-2 p-2 border border-slate-200 rounded-lg min-h-[42px] focus-within:ring-1 focus-within:ring-primary focus-within:border-primary bg-white">
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-700">
-                                            Safety
-                                            <button className="hover:text-red-500"><span className="material-symbols-outlined text-[14px]">close</span></button>
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-700">
-                                            Compliance
-                                            <button className="hover:text-red-500"><span className="material-symbols-outlined text-[14px]">close</span></button>
-                                        </span>
-                                        <input className="border-none p-0 focus:ring-0 text-sm w-24 placeholder-slate-400" placeholder="Add tag..." type="text" />
+                                        {tags.map((tag, index) => (
+                                            <span key={index} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-700">
+                                                {tag}
+                                                <button
+                                                    onClick={() => removeTag(tag)}
+                                                    className="hover:text-red-500"
+                                                >
+                                                    <span className="material-symbols-outlined text-[14px]">close</span>
+                                                </button>
+                                            </span>
+                                        ))}
+                                        <input
+                                            className="border-none p-0 focus:ring-0 text-sm w-24 placeholder-slate-400"
+                                            placeholder="Add tag..."
+                                            type="text"
+                                            value={tagInput}
+                                            onChange={(e) => setTagInput(e.target.value)}
+                                            onKeyDown={handleTagKeyDown}
+                                        />
                                     </div>
                                     <p className="text-xs text-slate-500 mt-1.5">Press Enter to add a tag</p>
                                 </div>
@@ -628,11 +897,16 @@ const ProjectDetails = () => {
                             <button
                                 onClick={() => setShowAddSourceModal(false)}
                                 className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                                disabled={uploading}
                             >
                                 Cancel
                             </button>
-                            <button className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm shadow-primary/30">
-                                Add Source
+                            <button
+                                onClick={handleAddSource}
+                                disabled={uploading || !selectedFile}
+                                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {uploading ? 'Uploading...' : 'Add Source'}
                             </button>
                         </div>
                     </div>

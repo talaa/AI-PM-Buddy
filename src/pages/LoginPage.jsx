@@ -31,10 +31,27 @@ const LoginPage = () => {
         }
     };
 
+    const handleAzureLogin = async () => {
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'azure',
+                options: {
+                    scopes: 'openid profile email',
+                },
+            });
+            if (error) throw error;
+        } catch (error) {
+            setError(error.message);
+        }
+    };
+
     const handleGoogleLogin = async () => {
         try {
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
+                options: {
+                    scopes: 'openid profile email',
+                },
             });
             if (error) throw error;
         } catch (error) {
@@ -118,6 +135,21 @@ const LoginPage = () => {
                             />
                         </svg>
                         Sign in with Google
+                    </button>
+
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-block azure-btn"
+                        onClick={handleAzureLogin}
+                        style={{ marginTop: '0.75rem' }}
+                    >
+                        <svg className="azure-icon" viewBox="0 0 23 23">
+                            <path fill="#f35325" d="M1 1h10v10H1z" />
+                            <path fill="#81bc06" d="M12 1h10v10H12z" />
+                            <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                            <path fill="#ffba08" d="M12 12h10v10H12z" />
+                        </svg>
+                        Sign in with Microsoft
                     </button>
                 </form>
 

@@ -40,10 +40,27 @@ const SignupPage = () => {
         }
     };
 
+    const handleAzureSignup = async () => {
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'azure',
+                options: {
+                    scopes: 'openid profile email',
+                },
+            });
+            if (error) throw error;
+        } catch (error) {
+            setError(error.message);
+        }
+    };
+
     const handleGoogleSignup = async () => {
         try {
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
+                options: {
+                    scopes: 'openid profile email',
+                },
             });
             if (error) throw error;
         } catch (error) {
@@ -139,6 +156,21 @@ const SignupPage = () => {
                             />
                         </svg>
                         Sign up with Google
+                    </button>
+
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-block azure-btn"
+                        onClick={handleAzureSignup}
+                        style={{ marginTop: '0.75rem' }}
+                    >
+                        <svg className="azure-icon" viewBox="0 0 23 23">
+                            <path fill="#f35325" d="M1 1h10v10H1z" />
+                            <path fill="#81bc06" d="M12 1h10v10H12z" />
+                            <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                            <path fill="#ffba08" d="M12 12h10v10H12z" />
+                        </svg>
+                        Sign up with Microsoft
                     </button>
                 </form>
 
