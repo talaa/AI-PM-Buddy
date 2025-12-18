@@ -8,6 +8,13 @@ class ChatRequest(BaseModel):
     history: Optional[List[Dict[str, str]]] = []
     session_id: Optional[str] = None  # For memory management
 
+class TeamChatRequest(BaseModel):
+    agent_ids: List[str]
+    project_id: str # Required for session grouping
+    document_ids: List[str] = []
+    message: str
+    session_id: Optional[str] = None    
+
 class AgentConfig(BaseModel):
     name: str
     description: str
@@ -32,4 +39,3 @@ class UpdateAgent(BaseModel):
 
 class FolderCreationRequest(BaseModel):
     path: str
-

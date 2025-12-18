@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import ProjectForm from '../components/ProjectForm';
 
 const ProjectDetails = () => {
     const { id } = useParams();
@@ -13,7 +14,7 @@ const ProjectDetails = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({});
     const [saving, setSaving] = useState(false);
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(true);
     const [showAddSourceModal, setShowAddSourceModal] = useState(false);
 
     // --- Upload / Documents State ---
@@ -27,13 +28,44 @@ const ProjectDetails = () => {
     const [tags, setTags] = useState([]);
     const [tagInput, setTagInput] = useState('');
     const [uploading, setUploading] = useState(false);
+
     const fileInputRef = useRef(null);
+
+    // --- A2A / Chat State ---
+    const [availableAgents, setAvailableAgents] = useState([]);
+    const [selectedAgents, setSelectedAgents] = useState([]);
+    const [selectedDocuments, setSelectedDocuments] = useState([]); // Array of IDs
+    const [chatHistory, setChatHistory] = useState([]);
+    const [chatInput, setChatInput] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [activeSessionId, setActiveSessionId] = useState(null);
+    const [projectSessions, setProjectSessions] = useState([]);
+    const chatEndRef = useRef(null);
 
     // --- Initialization ---
     useEffect(() => {
         fetchProjectDetails();
         fetchDocuments();
+        fetchAgents();
+        fetchProjectSessions();
     }, [id]);
+
+    // Fetch messages when active session changes
+    useEffect(() => {
+        if (activeSessionId) {
+            fetchSessionMessages(activeSessionId);
+        } else {
+            setChatHistory([]); // Clear if no session
+        }
+    }, [activeSessionId]);
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [chatHistory]);
+
+    const scrollToBottom = () => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
 
     // --- Fetchers ---
     const fetchProjectDetails = async () => {
@@ -74,6 +106,51 @@ const ProjectDetails = () => {
         }
     };
 
+    const fetchAgents = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('agents')
+                .select('*');
+            if (error) throw error;
+            setAvailableAgents(data || []);
+        } catch (err) {
+            console.error("Error fetching agents:", err);
+        }
+    };
+
+    const fetchProjectSessions = async () => {
+        try {
+            const response = await fetch(`http://localhost:8000/api/projects/${id}/sessions`);
+            if (response.ok) {
+                const data = await response.json();
+                setProjectSessions(data);
+                // Auto-select latest session if exists
+                if (data && data.length > 0 && !activeSessionId) {
+                    setActiveSessionId(data[0].id);
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching sessions:", error);
+        }
+    };
+
+    const fetchSessionMessages = async (sessionId) => {
+        try {
+            const response = await fetch(`http://localhost:8000/api/sessions/${sessionId}/messages`);
+            if (response.ok) {
+                const data = await response.json();
+                setChatHistory(data);
+            }
+        } catch (error) {
+            console.error("Error fetching messages:", error);
+        }
+    };
+
+    const createNewSession = () => {
+        setActiveSessionId(null);
+        setChatHistory([]);
+    };
+
     // --- Helpers ---
     const groupedDocuments = documents.reduce((acc, doc) => {
         const cat = doc.category || 'Uncategorized';
@@ -105,37 +182,108 @@ const ProjectDetails = () => {
         }));
     };
 
+    const toggleDocumentSelection = (docId) => {
+        setSelectedDocuments(prev =>
+            prev.includes(docId)
+                ? prev.filter(id => id !== docId)
+                : [...prev, docId]
+        );
+    };
+
+    const toggleAgentSelection = (agentId) => {
+        setSelectedAgents(prev =>
+            prev.includes(agentId)
+                ? prev.filter(id => id !== agentId)
+                : [...prev, agentId]
+        );
+    };
+
+    const handleSendMessage = async () => {
+        if (!chatInput.trim()) return;
+        if (selectedAgents.length === 0) {
+            alert("Please select at least one agent to chat with.");
+            return;
+        }
+
+        const userMsg = { role: 'user', content: chatInput, name: 'You' };
+        setChatHistory(prev => [...prev, userMsg]);
+        const currentMessage = chatInput;
+        setChatInput('');
+        setIsProcessing(true);
+
+        try {
+            const payload = {
+                project_id: id,
+                agent_ids: selectedAgents,
+                document_ids: selectedDocuments,
+                message: currentMessage,
+                session_id: activeSessionId
+            };
+
+            const response = await fetch('http://localhost:8000/api/a2a/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || "Chat failed");
+            }
+
+            const data = await response.json();
+
+            // Store the session ID returned by backend if we started a new one
+            if (data.session_id && data.session_id !== activeSessionId) {
+                setActiveSessionId(data.session_id);
+                // Also refresh session list to show title
+                fetchProjectSessions();
+            }
+
+            // The backend returns the PARTIAL interaction log for this turn.
+            // append it to history
+            // Wait, if it returns partial, we should append.
+            setChatHistory(prev => {
+                // If we are appending to existing
+                return [...prev, ...data.messages];
+            });
+
+            // Re-fetch full history to be safe and perfectly synced?
+            // Actually let's trust the return for smoother UI, but maybe fetch in background
+
+        } catch (error) {
+            console.error("Chat error:", error);
+            setChatHistory(prev => [...prev, { role: 'system', content: `Error: ${error.message}`, name: 'System' }]);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleChatKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    };
+
     // --- Project Editing Handlers ---
     const handleEdit = () => {
         setIsEditing(true);
-        setIsCollapsed(false);
-        setFormData({
-            ...project,
-            admins: Array.isArray(project.admins) ? project.admins.join(', ') : (project.admins || '')
-        });
+        // We don't need to manually set formData here as ProjectForm takes project as initialData
     };
 
     const handleCancel = () => {
         setIsEditing(false);
-        setFormData(project);
     };
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
-    const handleSave = async () => {
+    const handleEditSubmit = async (data) => {
         try {
             setSaving(true);
             const updates = {
-                ...formData,
-                admins: typeof formData.admins === 'string'
-                    ? formData.admins.split(',').map(a => a.trim()).filter(Boolean)
-                    : formData.admins,
+                ...data,
+                admins: typeof data.admins === 'string'
+                    ? data.admins.split(',').map(a => a.trim()).filter(Boolean)
+                    : data.admins,
                 updated_at: new Date().toISOString()
             };
 
@@ -147,6 +295,7 @@ const ProjectDetails = () => {
             if (error) throw error;
 
             setProject(updates);
+            setFormData(updates); // Update local formData too just in case
             setIsEditing(false);
         } catch (error) {
             console.error('Error updating project:', error);
@@ -281,6 +430,23 @@ const ProjectDetails = () => {
     if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
     if (!project) return <div className="p-8 text-center text-slate-500">Project not found</div>;
 
+    if (isEditing) {
+        return (
+            <div className="min-h-screen bg-background-light p-8">
+                <div className="max-w-5xl mx-auto">
+                    <h1 className="text-3xl font-bold mb-8 text-slate-900">Edit Project: {project.project_name}</h1>
+                    <ProjectForm
+                        initialData={project}
+                        onSubmit={handleEditSubmit}
+                        onCancel={handleCancel}
+                        isEditing={true}
+                        loading={saving}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="bg-background-light text-slate-900 font-display flex flex-col h-[calc(100vh-64px)] overflow-hidden">
             {/* Project Details Header Section */}
@@ -296,67 +462,24 @@ const ProjectDetails = () => {
                 <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm transition-all duration-300">
                     <div className="flex justify-between items-start">
                         <div className="flex-1 mr-8">
-                            {isEditing ? (
-                                <input
-                                    type="text"
-                                    name="project_name"
-                                    value={formData.project_name || ''}
-                                    onChange={handleChange}
-                                    className="w-full text-3xl font-bold text-slate-900 bg-slate-50 border-0 border-b-2 border-primary/20 focus:border-primary focus:ring-0 px-2 py-1 rounded-t-lg transition-colors placeholder-slate-300"
-                                    placeholder="Project Name"
-                                />
-                            ) : (
-                                <h1 className="text-3xl font-bold text-slate-900">{project.project_name}</h1>
-                            )}
+                            <h1 className="text-3xl font-bold text-slate-900">{project.project_name}</h1>
                         </div>
 
                         <div className="flex items-center gap-6">
-                            {isEditing ? (
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={handleCancel}
-                                        className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-slate-200"
-                                        disabled={saving}
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">close</span>
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleSave}
-                                        className="flex items-center gap-2 bg-primary bg-blue-600 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border border-transparent"
-                                        disabled={saving}
-                                    >
-                                        <span className="material-symbols-outlined text-[18px]">save</span>
-                                        {saving ? 'Saving...' : 'Save'}
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={handleEdit}
-                                    className="flex items-center gap-1 text-slate-400  hover:text-primary transition-colors"
-                                    title="Edit Project"
-                                >
-                                    <span className="material-symbols-outlined text-[20px]">edit</span>
-                                </button>
-                            )}
+                            <button
+                                onClick={handleEdit}
+                                className="flex items-center gap-1 text-slate-400  hover:text-primary transition-colors"
+                                title="Edit Project"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">edit</span>
+                            </button>
 
                             <div className="text-right">
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        name="currency"
-                                        value={formData.currency || ''}
-                                        onChange={handleChange}
-                                        className="w-20 text-right font-bold text-xl bg-slate-50 rounded-lg border-slate-200 focus:border-primary focus:ring-primary"
-                                        placeholder="SAR"
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-end gap-1.5 font-bold text-xl text-slate-900">
-                                        <div className="text-[10px] text-slate-400 font-normal uppercase tracking-wider mr-1">Currency</div>
-                                        <span className="material-symbols-outlined text-[24px]">credit_card</span>
-                                        {project.currency || 'N/A'}
-                                    </div>
-                                )}
+                                <div className="flex items-center justify-end gap-1.5 font-bold text-xl text-slate-900">
+                                    <div className="text-[10px] text-slate-400 font-normal uppercase tracking-wider mr-1">Currency</div>
+                                    <span className="material-symbols-outlined text-[24px]">credit_card</span>
+                                    {project.currency || 'N/A'}
+                                </div>
                             </div>
 
                             <button
@@ -373,43 +496,16 @@ const ProjectDetails = () => {
                     {!isCollapsed && (
                         <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                             <div className="mb-6">
-                                {isEditing ? (
-                                    <div className="flex gap-4 max-w-2xl">
-                                        <div className="flex-1">
-                                            <label className="text-xs text-slate-400 font-medium ml-1">Country</label>
-                                            <input
-                                                type="text"
-                                                name="country"
-                                                value={formData.country || ''}
-                                                onChange={handleChange}
-                                                className="w-full bg-slate-50 rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary"
-                                                placeholder="Country"
-                                            />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="text-xs text-slate-400 font-medium ml-1">CT Name</label>
-                                            <input
-                                                type="text"
-                                                name="ct_name"
-                                                value={formData.ct_name || ''}
-                                                onChange={handleChange}
-                                                className="w-full bg-slate-50 rounded-lg border-slate-200 text-sm focus:border-primary focus:ring-primary"
-                                                placeholder="CT Name"
-                                            />
-                                        </div>
+                                <div className="flex items-center gap-4 text-slate-500 text-sm">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-[18px]">globe</span>
+                                        {project.country}
                                     </div>
-                                ) : (
-                                    <div className="flex items-center gap-4 text-slate-500 text-sm">
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="material-symbols-outlined text-[18px]">globe</span>
-                                            {project.country}
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="material-symbols-outlined text-[18px]">business_center</span>
-                                            {project.ct_name || 'No CT Name'}
-                                        </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-[18px]">business_center</span>
+                                        {project.ct_name || 'No CT Name'}
                                     </div>
-                                )}
+                                </div>
                             </div>
 
                             {/* Stats Grid */}
@@ -423,31 +519,11 @@ const ProjectDetails = () => {
                                     <div className="space-y-3">
                                         <div>
                                             <div className="text-slate-500 text-xs mb-0.5">Start Date</div>
-                                            {isEditing ? (
-                                                <input
-                                                    type="date"
-                                                    name="forecast_start_date"
-                                                    value={formData.forecast_start_date || ''}
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white rounded border-slate-200 text-xs p-1 h-7"
-                                                />
-                                            ) : (
-                                                <div className="font-medium text-slate-900 text-sm">{project.forecast_start_date || 'N/A'}</div>
-                                            )}
+                                            <div className="font-medium text-slate-900 text-sm">{project.forecast_start_date || 'N/A'}</div>
                                         </div>
                                         <div>
                                             <div className="text-slate-500 text-xs mb-0.5">End Date</div>
-                                            {isEditing ? (
-                                                <input
-                                                    type="date"
-                                                    name="forecast_end_date"
-                                                    value={formData.forecast_end_date || ''}
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white rounded border-slate-200 text-xs p-1 h-7"
-                                                />
-                                            ) : (
-                                                <div className="font-medium text-slate-900 text-sm">{project.forecast_end_date || 'N/A'}</div>
-                                            )}
+                                            <div className="font-medium text-slate-900 text-sm">{project.forecast_end_date || 'N/A'}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -459,22 +535,12 @@ const ProjectDetails = () => {
                                         Admins
                                     </div>
                                     <div>
-                                        {isEditing ? (
-                                            <textarea
-                                                name="admins"
-                                                value={formData.admins || ''}
-                                                onChange={handleChange}
-                                                className="w-full h-24 text-xs bg-white rounded border-slate-200 resize-none p-2"
-                                                placeholder="email1@test.com, email2@test.com"
-                                            />
-                                        ) : (
-                                            (project.admins || []).map((admin, i) => (
-                                                <span key={i} className="inline-block w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 truncate mb-1" title={admin}>
-                                                    {admin}
-                                                </span>
-                                            ))
-                                        )}
-                                        {!isEditing && (!project.admins || project.admins.length === 0) && (
+                                        {(project.admins || []).map((admin, i) => (
+                                            <span key={i} className="inline-block w-full text-center px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 truncate mb-1" title={admin}>
+                                                {admin}
+                                            </span>
+                                        ))}
+                                        {(!project.admins || project.admins.length === 0) && (
                                             <span className="text-slate-400 text-xs italic">No admins</span>
                                         )}
                                     </div>
@@ -595,7 +661,13 @@ const ProjectDetails = () => {
                                                 return (
                                                     <div key={doc.id || i} className="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200">
                                                         <div className="mt-0.5">
-                                                            <input type="checkbox" className="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4" />
+                                                            <input
+                                                                type="checkbox"
+                                                                className="rounded border-slate-300 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 size-4"
+                                                                checked={selectedDocuments.includes(doc.id)}
+                                                                onChange={(e) => { e.stopPropagation(); toggleDocumentSelection(doc.id); }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-2 mb-0.5">
@@ -637,7 +709,7 @@ const ProjectDetails = () => {
 
                 {/* Chat Interface */}
                 <section className="flex-1 flex flex-col min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-b border-slate-100 px-6 flex items-center justify-between z-10">
+                    <div className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-100 px-6 flex items-center justify-between shrink-0 z-10">
                         <div className="flex flex-col">
                             <div className="flex items-center gap-2 text-xs font-medium mb-1">
                                 <a className="text-slate-500 hover:text-primary transition-colors" href="#">Projects</a>
@@ -650,51 +722,102 @@ const ProjectDetails = () => {
                             <button className="p-2 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-100">
                                 <span className="material-symbols-outlined text-[20px]">ios_share</span>
                             </button>
+                            <button
+                                onClick={createNewSession}
+                                className="p-2 text-slate-400 hover:text-green-600 transition-colors rounded-full hover:bg-green-50"
+                                title="New Chat Session"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">add_comment</span>
+                            </button>
+
+                            <select
+                                className="bg-slate-50 border-none text-xs rounded-lg max-w-[150px] truncate outline-none focus:ring-1 focus:ring-primary"
+                                value={activeSessionId || ""}
+                                onChange={(e) => setActiveSessionId(e.target.value || null)}
+                            >
+                                <option value="">New Chat</option>
+                                {projectSessions.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        {new Date(s.updated_at).toLocaleDateString()} - {s.title}
+                                    </option>
+                                ))}
+                            </select>
+
                             <button className="p-2 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-100">
                                 <span className="material-symbols-outlined text-[20px]">more_vert</span>
                             </button>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto pt-20 pb-24 px-4 sm:px-8 md:px-16 lg:px-24">
-                        <div className="flex justify-center mb-8">
-                            <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-medium text-slate-500">Today, October 24</span>
-                        </div>
-                        <div className="flex gap-4 mb-8">
-                            <div className="size-8 rounded-full bg-gradient-to-br from-primary to-blue-400 shrink-0 flex items-center justify-center shadow-lg shadow-primary/20">
-                                <span className="material-symbols-outlined text-white text-[18px]">smart_toy</span>
+                    <div className="flex-1 overflow-y-auto p-4 sm:px-8 md:px-16 lg:px-24">
+                        {chatHistory.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                                <span className="material-symbols-outlined text-[48px] mb-2 opacity-50">forum</span>
+                                <p className="text-sm">Select agents on the right, documents on the left,<br />and start chatting!</p>
                             </div>
-                            <div className="flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-bold text-slate-900">PM Buddy</span>
-                                    <span className="text-xs text-slate-400">10:42 AM</span>
-                                </div>
-                                <div className="text-slate-700 leading-relaxed text-[15px]">
-                                    <p className="mb-2">Hello! I've analyzed the newly uploaded <strong>Q3_Budget_BOQ.xlsx</strong>. It seems like we are projecting a variance in the concrete supply costs.</p>
-                                    <p>Here is a quick summary:</p>
-                                    <ul className="list-disc pl-5 space-y-1 mt-2 mb-2">
-                                        <li><strong>Budgeted:</strong> $1.2M</li>
-                                        <li><strong>Projected:</strong> $1.35M (+12.5%)</li>
-                                        <li><strong>Source:</strong> Row 45, Column F</li>
-                                    </ul>
-                                    <p>Would you like me to draft an email to the supplier or update the risk register?</p>
-                                </div>
-                                <div className="flex gap-2 mt-3">
-                                    <button className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-xs font-medium text-slate-700 transition-colors border border-slate-200">
-                                        <span className="material-symbols-outlined text-[16px]">mail</span>
-                                        Draft Email
-                                    </button>
-                                    <button className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg text-xs font-medium text-slate-700 transition-colors border border-slate-200">
-                                        <span className="material-symbols-outlined text-[16px]">warning</span>
-                                        Update Risk Register
-                                    </button>
-                                </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {chatHistory.map((msg, idx) => {
+                                    // Handle System/Thought messages differently
+                                    if (msg.role === 'system' || msg.role === 'function' || msg.name === 'Supervisor') {
+                                        return (
+                                            <div key={idx} className="flex justify-center my-2">
+                                                <div className="bg-slate-50 text-slate-500 text-xs px-3 py-1.5 rounded-full border border-slate-200 flex items-center gap-2 max-w-[80%]">
+                                                    <span className="material-symbols-outlined text-[14px]">
+                                                        {msg.name === 'Supervisor' ? 'alt_route' : 'settings'}
+                                                    </span>
+                                                    <span className="font-semibold">{msg.name}:</span>
+                                                    <span className="truncate">{typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div key={idx} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                                            <div className={`size-8 rounded-full shrink-0 flex items-center justify-center shadow-md ${msg.role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-gradient-to-br from-primary to-blue-400 text-white'}`}>
+                                                <span className="material-symbols-outlined text-[18px]">
+                                                    {msg.role === 'user' ? 'person' : 'smart_toy'}
+                                                </span>
+                                            </div>
+                                            <div className={`flex-1 space-y-1 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                                                <div className={`flex items-center gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                                                    <span className="text-sm font-bold text-slate-900">{msg.name || (msg.role === 'user' ? 'You' : 'Agent')}</span>
+                                                </div>
+                                                <div className={`inline-block text-slate-700 leading-relaxed text-[15px] p-3 rounded-lg ${msg.role === 'user' ? 'bg-slate-100' : 'bg-white border border-slate-100 shadow-sm text-left'}`}>
+                                                    <div className="whitespace-pre-wrap">{typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {isProcessing && (
+                                    <div className="flex gap-4">
+                                        <div className="size-8 rounded-full bg-slate-100 shrink-0 flex items-center justify-center animate-pulse">
+                                            <span className="material-symbols-outlined text-[18px] text-slate-400">more_horiz</span>
+                                        </div>
+                                        <div className="text-sm text-slate-400 mt-1.5 flex items-center gap-2">
+                                            Agents are working...
+                                            <span className="size-2 bg-primary rounded-full animate-bounce"></span>
+                                        </div>
+                                    </div>
+                                )}
+                                <div ref={chatEndRef} />
                             </div>
-                        </div>
+                        )}
                     </div>
-                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white to-transparent via-20%">
+
+                    <div className="p-4 bg-white border-t border-slate-100 shrink-0">
                         <div className="max-w-4xl mx-auto relative group">
                             <div className="bg-white border border-slate-200 rounded-2xl shadow-lg flex flex-col transition-all focus-within:ring-2 focus-within:ring-primary/50">
-                                <textarea className="w-full bg-transparent border-none text-slate-900 placeholder-slate-400 p-4 resize-none focus:ring-0 max-h-32 text-[15px]" placeholder="Ask anything about your project..." rows="1"></textarea>
+                                <textarea
+                                    className="w-full bg-transparent border-none text-slate-900 placeholder-slate-400 p-4 resize-none focus:ring-0 max-h-32 text-[15px]"
+                                    placeholder={selectedAgents.length === 0 ? "Select agents to start chatting..." : "Ask your team..."}
+                                    rows="1"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyDown={handleChatKeyDown}
+                                    disabled={isProcessing}
+                                ></textarea>
                                 <div className="flex justify-between items-center px-2 pb-2">
                                     <div className="flex gap-1">
                                         <button className="p-2 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-lg transition-colors">
@@ -704,13 +827,17 @@ const ProjectDetails = () => {
                                             <span className="material-symbols-outlined text-[20px]">mic</span>
                                         </button>
                                     </div>
-                                    <button className="flex items-center justify-center size-9 bg-primary hover:bg-blue-600 text-white rounded-xl shadow-md shadow-primary/20 transition-all transform active:scale-95">
+                                    <button
+                                        onClick={handleSendMessage}
+                                        disabled={!chatInput.trim() || isProcessing}
+                                        className="flex items-center justify-center size-9 bg-primary hover:bg-blue-600 text-white rounded-xl shadow-md shadow-primary/20 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
                                         <span className="material-symbols-outlined text-[20px]">arrow_upward</span>
                                     </button>
                                 </div>
                             </div>
                             <div className="text-center mt-2">
-                                <p className="text-[10px] text-slate-400">AI PM Buddy can make mistakes. Verify important information.</p>
+                                <p className="text-[10px] text-slate-400">AI agents can make mistakes. Verify important information.</p>
                             </div>
                         </div>
                     </div>
@@ -726,48 +853,34 @@ const ProjectDetails = () => {
                             </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 relative overflow-hidden group hover:border-primary/50 transition-colors">
-                                <div className="absolute top-3 right-3 flex gap-2">
-                                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 text-green-600 rounded text-[10px] font-bold uppercase tracking-wider border border-green-500/20">
-                                        <div className="size-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                                        Active
+                            {availableAgents.length === 0 ? (
+                                <div className="text-center py-4 text-slate-400 text-xs">No agents found. Create one in Agents page.</div>
+                            ) : (
+                                availableAgents.map(agent => (
+                                    <div
+                                        key={agent.id}
+                                        onClick={() => toggleAgentSelection(agent.id)}
+                                        className={`bg-slate-50 p-3 rounded-xl border relative cursor-pointer transition-colors ${selectedAgents.includes(agent.id) ? 'border-primary ring-1 ring-primary' : 'border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                        <div className="absolute top-3 right-3 flex gap-2">
+                                            {selectedAgents.includes(agent.id) && (
+                                                <div className="flex items-center justify-center size-5 bg-primary text-white rounded-full">
+                                                    <span className="material-symbols-outlined text-[14px]">check</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="size-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary border border-slate-100">
+                                                <span className="material-symbols-outlined">smart_toy</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900">{agent.name}</h4>
+                                                <p className="text-xs text-slate-500 truncate max-w-[120px]">{agent.description || "AI Assistant"}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="size-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-                                        <span className="material-symbols-outlined">attach_money</span>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-slate-900">Budget Buddy</h4>
-                                        <p className="text-xs text-slate-500">Monitoring variance</p>
-                                    </div>
-                                </div>
-                                <div className="text-xs text-slate-600 mb-3 bg-white p-2 rounded border border-slate-200">
-                                    Found 12.5% variance in Q3 Concrete supply.
-                                </div>
-                                <button className="w-full py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors border border-indigo-100">
-                                    View Report
-                                </button>
-                            </div>
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 relative group hover:border-slate-400 transition-colors">
-                                <div className="absolute top-3 right-3">
-                                    <div className="px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[10px] font-bold uppercase tracking-wider">
-                                        Idle
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="size-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100">
-                                        <span className="material-symbols-outlined">radar</span>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-slate-900">Risk Radar</h4>
-                                        <p className="text-xs text-slate-500">Scanning emails</p>
-                                    </div>
-                                </div>
-                                <button className="w-full mt-2 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:text-primary hover:border-primary/50 transition-colors">
-                                    Run Scan
-                                </button>
-                            </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </aside>

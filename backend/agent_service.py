@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Optional
 #from langchain_community.chat_models import ChatOllama
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, FunctionMessage, BaseMessage
 from langchain_core.output_parsers import StrOutputParser
 from schemas import AgentConfig
 from database import supabase
@@ -13,59 +13,24 @@ logger = logging.getLogger(__name__)
 # Store active chains per agent
 active_chains: Dict[str, Any] = {}
 
+from agent_graph import create_agent_graph
+
 def create_langchain_agent(agent_config: AgentConfig):
-    """Create a LangChain agent with the given configuration"""
-    
-    logger.info(f"Creating LangChain agent with model: {agent_config.model}")
+    """
+    Create a LangGraph agent with the given configuration.
+    (Kept name for compatibility, but returns a CompiledGraph)
+    """
+    logger.info(f"Creating LangGraph agent for: {agent_config.name}")
+    return create_agent_graph(agent_config)
 
-    # Initialize Ollama LLM
-    llm = ChatOllama(
-        model=agent_config.model,
-        #temperature=agent_config.temperature,
-        #num_predict=agent_config.max_tokens,
-        base_url="http://localhost:11434"  # Default Ollama URL
-    )
-    
-    # Create system prompt template
-    system_template = f"""You are an AI assistant named '{agent_config.name}'.
-
-Description: {agent_config.description}
-
-Instructions:
-{agent_config.instructions}
-
-Knowledge Base / Context:
-{agent_config.knowledge or 'No specific knowledge base provided.'}
-
-Tools Available: {', '.join(agent_config.tools or [])}
-
-Remember to:
-- Follow the instructions carefully
-- Use the knowledge base when relevant
-- Be helpful, accurate, and concise
-- Maintain conversation context
-"""
-    
-    # Create prompt template with message history
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_template),
-        MessagesPlaceholder(variable_name="history"),
-        ("human", "{input}")
-    ])
-    
-    # Create the chain
-    chain = prompt | llm | StrOutputParser()
-    
-    return chain
-
-def convert_history_to_messages(history: List[Dict[str, str]]) -> List:
+def convert_history_to_messages(history: List[Dict[str, str]]) -> List[BaseMessage]:
     """Convert history dict to LangChain message objects"""
     messages = []
     if not history:
         return messages
         
     for msg in history:
-        role = msg.get('role', 'user')
+        role = msg.get('role', 'user').lower()
         content = msg.get('content', '')
         
         if role == 'user':
@@ -74,6 +39,8 @@ def convert_history_to_messages(history: List[Dict[str, str]]) -> List:
             messages.append(AIMessage(content=content))
         elif role == 'system':
             messages.append(SystemMessage(content=content))
+        elif role == 'function':
+            messages.append(FunctionMessage(name=msg.get('name', 'tool'), content=content))
     
     return messages
 

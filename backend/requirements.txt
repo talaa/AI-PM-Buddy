@@ -14,8 +14,11 @@ langchain-core
 
 
 # For RAG
-chromadb
+chromadb # Keep for local backup if needed
 tiktoken
+pypdf
+langchain-ollama
 
 # Optional but recommended
 redis  # For production memory management
+langgraph

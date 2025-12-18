@@ -1,5 +1,7 @@
 import shutil
 import logging
+# Force reload
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from datetime import datetime
 import os
@@ -14,12 +16,39 @@ from agent_service import (
     create_langchain_agent,
     convert_history_to_messages,
     get_agent_config_by_id,
-    active_chains
+    active_chains,
 )
+from a2a_service import create_team_graph
+from schemas import ChatRequest, TeamChatRequest
+from langchain_core.messages import HumanMessage, SystemMessage
+
+
+# Configure logging
+from pydantic import BaseModel
+from typing import Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# --- Solution 2: A2A Architecture Components ---
+
+# In-memory message queue (upgradeable to Redis)
+# Structure: { to_agent_id: [ {from, message, timestamp, ...} ] }
+a2a_message_buffer: Dict[str, List[Dict]] = {}
+
+class A2ASendRequest(BaseModel):
+    from_agent_id: str
+    to_agent_id: str
+    message: str
+    context: Optional[Dict] = None
+
+class CollaborationRequest(BaseModel):
+    agent_id: str  # The "Leader" agent
+    message: str
+    collaborating_agents: List[str]
+    history: List[Dict] = []
+    document_ids: List[str] = [] # Added to support RAG context
 
 app = FastAPI()
 
@@ -113,15 +142,30 @@ async def chat_with_agent(request: ChatRequest):
         # Convert history to LangChain messages
         history_messages = convert_history_to_messages(request.history)
         
-        # Invoke the chain
-        logger.info(f"Invoking chain with model: {agent_config.model}")
-        response = chain.invoke({
-            "input": request.message,
-            "history": history_messages
-        })
+        # Prepare System Message
+        system_msg = SystemMessage(content=f"""You are {agent_config.name}. 
+Description: {agent_config.description}
+Instructions: {agent_config.instructions}
+Relevant Knowledge: {agent_config.knowledge or ''}
+""")
+        
+        # Construct input state
+        # We need to prepend system message if it's not in history (usually it isn't)
+        # And append the current user input
+        messages = [system_msg] + history_messages + [HumanMessage(content=request.message)]
+        
+        # Invoke the graph
+        logger.info(f"Invoking agent graph with model: {agent_config.model}")
+        
+        # Async invoke is preferred but synchronous 'invoke' works too on CompiledGraph
+        result_state = await chain.ainvoke({"messages": messages})
+        
+        # Extract the final response (last message)
+        final_message = result_state["messages"][-1]
+        response_content = final_message.content
         
         return {
-            "response": response,
+            "response": response_content,
             "agent_name": agent_config.name,
             "model_used": agent_config.model,
             "session_id": request.session_id,
@@ -147,6 +191,279 @@ async def chat_with_agent(request: ChatRequest):
             )
         
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+@app.post("/api/a2a/chat")
+async def team_chat(request: TeamChatRequest):
+    """
+    Agent-to-Agent Team Chat (Solution 2 Implementation)
+    Routes to the new specific 'collaborate' logic but keeps endpoint for frontend compatibility.
+    """
+    # Simply delegate to the new architecture
+    return await collaborate(request)
+
+# --- Solution 2: New A2A Endpoints ---
+
+@app.post("/api/a2a/send")
+async def send_a2a_message(request: A2ASendRequest):
+    """Send a message from one agent to another (Async)"""
+    try:
+        if request.to_agent_id not in a2a_message_buffer:
+            a2a_message_buffer[request.to_agent_id] = []
+            
+        a2a_message_buffer[request.to_agent_id].append({
+            "from_agent_id": request.from_agent_id,
+            "message": request.message,
+            "timestamp": datetime.now().isoformat(),
+            "context": request.context or {}
+        })
+        logger.info(f"A2A Message Queued: {request.from_agent_id} -> {request.to_agent_id}")
+        return {"status": "queued"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/a2a/messages/{agent_id}")
+async def get_a2a_messages(agent_id: str):
+    """Retrieve pending messages for an agent"""
+    messages = a2a_message_buffer.get(agent_id, [])
+    # Clear buffer after retrieval (or use acknowledgement in future)
+    a2a_message_buffer[agent_id] = []
+    return {"messages": messages}
+
+@app.post("/api/a2a/collaborate")
+async def collaborate(request: TeamChatRequest): 
+    # NOTE: Reusing TeamChatRequest for frontend compatibility, but implementing "Collaborative Processing" logic
+    # Request: agent_ids (list), document_ids, message
+    
+    # --- 1. Session Management ---
+    session_id = request.session_id
+    
+    # If no session_id, create a new session
+    if not session_id:
+        try:
+            # Create new session
+            # Try with title first
+            try:
+                sess_resp = supabase.table("chat_sessions").insert({
+                    "project_id": request.project_id,
+                    "title": f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}" 
+                }).execute()
+            except Exception as e:
+                # Fallback: Maybe 'title' column is missing from schema cache or table
+                logger.warning(f"Failed to insert with title, trying without. Error: {e}")
+                sess_resp = supabase.table("chat_sessions").insert({
+                    "project_id": request.project_id
+                }).execute()
+
+            if sess_resp.data:
+                session_id = sess_resp.data[0]["id"]
+        except Exception as e:
+            logger.error(f"Failed to create session: {e}")
+            # Debugging: Return this error to frontend
+            return {
+                "status": "error",
+                "message": f"Database Error: {str(e)}. Tip: Go to Supabase Dashboard > Settings > API > 'Reload Schema Cache'."
+            }
+
+    # Save User Message
+    if session_id:
+        try:
+            supabase.table("chat_messages").insert({
+                "session_id": session_id,
+                "sender_id": "user",
+                "role": "user",
+                "content": request.message
+            }).execute()
+        except Exception as e:
+            logger.error(f"Failed to save user message: {e}")
+
+    # --- 2. Load History ---
+    # Fetch recent messages for context
+    history_context = []
+    if session_id:
+        try:
+            # Get last 10 messages for context
+            h_resp = supabase.table("chat_messages").select("*").eq("session_id", session_id).order("created_at", desc=True).limit(10).execute()
+            if h_resp.data:
+                # Reverse to get chronological order
+                msgs = h_resp.data[::-1]
+                for m in msgs:
+                    history_context.append(f"{m['role'].upper()}: {m['content']}")
+        except Exception as e:
+            logger.error(f"Failed to load history: {e}")
+
+    # 1. Select a "Leader" agent (first one selected) and "Workers" (rest)
+    if not request.agent_ids:
+        raise HTTPException(status_code=400, detail="At least one agent must be selected")
+        
+    leader_id = request.agent_ids[0]
+    worker_ids = request.agent_ids[1:]
+    
+    # 2. Setup Context (RAG)
+    context_str = ""
+    for doc_id in request.document_ids:
+        resp = supabase.table("project_documents").select("file_path").eq("id", doc_id).single().execute()
+        if resp.data and os.path.exists(resp.data.get("file_path")):
+            try:
+                with open(resp.data.get("file_path"), "r", encoding="utf-8", errors="ignore") as f:
+                    context_str += f"\nDocument Context:\n{f.read()[:2000]}...\n" # Limit for now
+            except: pass
+
+    # 3. Create the Plan/Task
+    # We ask the Leader to analyze the request and delegate if needed
+    leader_config = get_agent_config_by_id(leader_id)
+    if not leader_config:
+        raise HTTPException(status_code=404, detail=f"Leader agent {leader_id} not found")
+        
+    # Construct the Leader's chain
+    # We manually inject the collaboration prompt
+    llm = ChatOllama(model=leader_config.model, base_url="http://localhost:11434")
+    
+    # If there are workers, we tell the leader they can ask them questions
+    collaboration_prompt = ""
+    if worker_ids:
+        worker_details = []
+        for wid in worker_ids:
+            wc = get_agent_config_by_id(wid)
+            if wc:
+                worker_details.append(f"{wc.name} ({wc.description})")
+        collaboration_prompt = f"\nYou have the following team members available to help: {', '.join(worker_details)}. "
+    
+    # Add history to system prompt context
+    history_str = "\n".join(history_context)
+    
+    full_system_prompt = f"""You are {leader_config.name}. {leader_config.instructions}
+    {context_str}
+    {collaboration_prompt}
+    
+    Recent Conversation History:
+    {history_str}
+    
+    User Request: {request.message}
+    
+    If you need help from your team, describe what you need. If you can answer directly, do so.
+    For this 'Lite' collaboration, simply provide your best answer, incorporating your own knowledge.
+    """
+    
+    # In a full impl, we would loop: Leader -> sends msg -> Worker -> sends reply -> Leader -> Final Answer.
+    # For MVP of Solution 2, we will do a simple "Consultation":
+    # 1. Leader thinks about the plan.
+    # 2. We (the code) query the workers in parallel with the user request.
+    # 3. We feed worker responses back to the leader as "Context".
+    # 4. Leader gives final answer.
+    
+    internal_logs = []
+    
+    # Step 1: Consult Workers (Parallel)
+    worker_responses = []
+    for wid in worker_ids:
+        w_config = get_agent_config_by_id(wid)
+        if w_config:
+            w_llm = ChatOllama(model=w_config.model)
+            w_prompt = f"You are {w_config.name}. Context: {context_str}\n\nUser Question: {request.message}\n\nProvide your input/analysis."
+            w_resp = w_llm.invoke(w_prompt)
+            worker_responses.append(f"Input from {w_config.name}:\n{w_resp.content}")
+            
+            # Save Agent Internal Thought
+            if session_id:
+                try:
+                    supabase.table("chat_messages").insert({
+                        "session_id": session_id,
+                        "sender_id": wid,
+                        "sender_name": w_config.name,
+                        "role": "function",
+                        "content": w_resp.content
+                    }).execute()
+                except: pass
+
+            internal_logs.append({
+                "role": "function", 
+                "name": w_config.name, 
+                "content": w_resp.content
+            })
+            
+    # Step 2: Leader Synthesis
+    final_inputs = f"""User Request: {request.message}
+    
+    Team Inputs:
+    {chr(10).join(worker_responses)}
+    
+    Based on the above, provide a comprehensive response to the user.
+    """
+    
+    leader_resp = llm.invoke([
+        SystemMessage(content=full_system_prompt),
+        HumanMessage(content=final_inputs)
+    ])
+    
+    # Save Leader Response
+    if session_id:
+        try:
+            supabase.table("chat_messages").insert({
+                "session_id": session_id,
+                "sender_id": leader_id,
+                "sender_name": leader_config.name,
+                "role": "assistant",
+                "content": leader_resp.content
+            }).execute()
+        except Exception as e:
+            logger.error(f"Failed to save leader response: {e}")
+
+    
+    # Construct partial history to return to frontend
+    # Filter out internal logs if detailed view not desired, but user wanted visibility.
+    # We will return: [User Msg] -> [Worker Thoughts] -> [Leader Final Answer]
+    
+    messages_to_return = []
+    # messages_to_return.append({"role": "user", "content": request.message}) # Frontend already has this
+    
+    for log in internal_logs:
+        messages_to_return.append(log)
+        
+    messages_to_return.append({
+        "role": "assistant",
+        "name": leader_config.name,
+        "content": leader_resp.content
+    })
+
+    return {
+        "status": "success",
+        "messages": messages_to_return,
+        "session_id": session_id # Return the ID so frontend can update URL or state
+    }
+
+
+@app.get("/api/projects/{project_id}/sessions")
+async def get_project_sessions(project_id: str):
+    """List chat sessions for a project"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    try:
+        response = supabase.table("chat_sessions").select("*").eq("project_id", project_id).order("updated_at", desc=True).limit(50).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Error fetching sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sessions/{session_id}/messages")
+async def get_session_messages(session_id: str):
+    """Get full message history for a session"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    try:
+        response = supabase.table("chat_messages").select("*").eq("session_id", session_id).order("created_at", desc=False).execute()
+        
+        # Format for frontend
+        formatted = []
+        for msg in response.data:
+            formatted.append({
+                "role": msg["role"],
+                "content": msg["content"],
+                "name": msg.get("sender_name", msg["role"])
+            })
+        return formatted
+    except Exception as e:
+        logger.error(f"Error fetching messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/chat/cache/{agent_id}")
 async def clear_agent_cache(agent_id: str):
@@ -220,8 +537,12 @@ async def create_folders_endpoint(request: FolderCreationRequest):
         logger.error(f"Error in folder creation: {e}")
         raise HTTPException(status_code=500, detail=f"System error: {str(e)}")
 
+from fastapi import BackgroundTasks
+from ingest_service import process_and_store_document
+
 @app.post("/api/documents/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     project_id: str = Form(...),
     user_id: str = Form(...),
@@ -234,6 +555,7 @@ async def upload_document(
     1. Fetch project path from Supabase.
     2. Save file to category subfolder.
     3. Log entry to project_documents table.
+    4. Trigger RAG Ingestion (Async).
     """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
@@ -282,10 +604,20 @@ async def upload_document(
         }
 
         db_response = supabase.table("project_documents").insert(doc_entry).execute()
+        new_doc = db_response.data[0] if db_response.data else {}
+
+        # 4. Trigger Ingestion (Background)
+        if new_doc and new_doc.get("id"):
+            background_tasks.add_task(
+                process_and_store_document, 
+                document_id=new_doc.get("id"), 
+                file_path=file_path,
+                metadata={"category": category}
+            )
 
         return {
-            "message": "File uploaded and logged successfully", 
-            "data": db_response.data[0] if db_response.data else {},
+            "message": "File uploaded and logged successfully. RAG ingestion started.", 
+            "data": new_doc,
             "saved_path": file_path
         }
 
