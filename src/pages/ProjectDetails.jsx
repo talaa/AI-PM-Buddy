@@ -40,6 +40,7 @@ const ProjectDetails = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [activeSessionId, setActiveSessionId] = useState(null);
     const [projectSessions, setProjectSessions] = useState([]);
+    const [agentTasks, setAgentTasks] = useState([]); // List of { text: string, completed: boolean }
     const chatEndRef = useRef(null);
 
     // --- Initialization ---
@@ -136,19 +137,34 @@ const ProjectDetails = () => {
 
     const fetchSessionMessages = async (sessionId) => {
         try {
+            // 1. Fetch Messages
             const response = await fetch(`http://localhost:8000/api/sessions/${sessionId}/messages`);
             if (response.ok) {
                 const data = await response.json();
                 setChatHistory(data);
             }
+
+            // 2. Fetch Plan from session
+            const { data: sessionData, error } = await supabase
+                .from('chat_sessions')
+                .select('plan')
+                .eq('id', sessionId)
+                .single();
+
+            if (!error && sessionData?.plan) {
+                setAgentTasks(sessionData.plan);
+            } else if (!error) {
+                setAgentTasks([]); // Clear if no plan
+            }
         } catch (error) {
-            console.error("Error fetching messages:", error);
+            console.error("Error fetching session data:", error);
         }
     };
 
     const createNewSession = () => {
         setActiveSessionId(null);
         setChatHistory([]);
+        setAgentTasks([]);
     };
 
     // --- Helpers ---
@@ -200,10 +216,7 @@ const ProjectDetails = () => {
 
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
-        if (selectedAgents.length === 0) {
-            alert("Please select at least one agent to chat with.");
-            return;
-        }
+        // Optional agent selection: If none selected, we default to the Deep Agent orchestrator.
 
         const userMsg = { role: 'user', content: chatInput, name: 'You' };
         setChatHistory(prev => [...prev, userMsg]);
@@ -220,7 +233,7 @@ const ProjectDetails = () => {
                 session_id: activeSessionId
             };
 
-            const response = await fetch('http://localhost:8000/api/a2a/chat', {
+            const response = await fetch('http://localhost:8000/api/a2a/collaborate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -233,6 +246,27 @@ const ProjectDetails = () => {
 
             const data = await response.json();
 
+            // Handle plan update - Prioritize pre-parsed plan from backend
+            if (data.plan && data.plan.length > 0) {
+                setAgentTasks(data.plan);
+            } else if (data.output) {
+                // Fallback to regex parsing if backend didn't parse it
+                const planMatch = data.output.match(/\[PLAN\]:(.*?)(?:\n\n|\n[A-Z]|$)/s);
+                if (planMatch) {
+                    const planText = planMatch[1];
+                    const tasks = planText.split('\n')
+                        .map(t => t.trim())
+                        .filter(t => t.startsWith('- [ ]') || t.startsWith('- [x]'))
+                        .map(t => ({
+                            text: t.replace(/^- \[[ x]\] /, ''),
+                            completed: t.startsWith('- [x]')
+                        }));
+                    if (tasks.length > 0) {
+                        setAgentTasks(tasks);
+                    }
+                }
+            }
+
             // Store the session ID returned by backend if we started a new one
             if (data.session_id && data.session_id !== activeSessionId) {
                 setActiveSessionId(data.session_id);
@@ -240,13 +274,10 @@ const ProjectDetails = () => {
                 fetchProjectSessions();
             }
 
-            // The backend returns the PARTIAL interaction log for this turn.
-            // append it to history
-            // Wait, if it returns partial, we should append.
-            setChatHistory(prev => {
-                // If we are appending to existing
-                return [...prev, ...data.messages];
-            });
+            // The backend returns the FULL standardized history including tool calls.
+            if (data.messages && data.messages.length > 0) {
+                setChatHistory(data.messages);
+            }
 
             // Re-fetch full history to be safe and perfectly synced?
             // Actually let's trust the return for smoother UI, but maybe fetch in background
@@ -752,7 +783,7 @@ const ProjectDetails = () => {
                         {chatHistory.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
                                 <span className="material-symbols-outlined text-[48px] mb-2 opacity-50">forum</span>
-                                <p className="text-sm">Select agents on the right, documents on the left,<br />and start chatting!</p>
+                                <p className="text-sm">Chat with your AI Project Manager.<br />(Optional) Select specialist agents on the right for expert advice.</p>
                             </div>
                         ) : (
                             <div className="space-y-6">
@@ -811,7 +842,7 @@ const ProjectDetails = () => {
                             <div className="bg-white border border-slate-200 rounded-2xl shadow-lg flex flex-col transition-all focus-within:ring-2 focus-within:ring-primary/50">
                                 <textarea
                                     className="w-full bg-transparent border-none text-slate-900 placeholder-slate-400 p-4 resize-none focus:ring-0 max-h-32 text-[15px]"
-                                    placeholder={selectedAgents.length === 0 ? "Select agents to start chatting..." : "Ask your team..."}
+                                    placeholder={selectedAgents.length === 0 ? "Ask your Project Manager..." : "Ask your team..."}
                                     rows="1"
                                     value={chatInput}
                                     onChange={(e) => setChatInput(e.target.value)}
@@ -845,9 +876,47 @@ const ProjectDetails = () => {
 
                 {/* Agents Sidebar */}
                 <aside className="flex flex-col w-[300px] gap-4 shrink-0">
+                    {/* Agent TO DO List */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[40%]">
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary">checklist</span>
+                                <h3 className="font-bold text-slate-800 text-lg">Agent's Plan</h3>
+                            </div>
+                            {agentTasks.length > 0 && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded-full uppercase">
+                                    {agentTasks.filter(t => t.completed).length}/{agentTasks.length} Done
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {agentTasks.length === 0 ? (
+                                <div className="text-center py-6">
+                                    <div className="size-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-3 text-slate-300">
+                                        <span className="material-symbols-outlined text-[28px]">pending_actions</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 italic">No active tasks. Ask the PM to help with something complex!</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2.5">
+                                    {agentTasks.map((task, idx) => (
+                                        <div key={idx} className="flex items-start gap-3 group">
+                                            <div className={`mt-0.5 size-4 rounded flex items-center justify-center border transition-colors ${task.completed ? 'bg-primary border-primary text-white' : 'border-slate-300 bg-white'}`}>
+                                                {task.completed && <span className="material-symbols-outlined text-[10px] font-bold">check</span>}
+                                            </div>
+                                            <span className={`text-sm leading-tight transition-all ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                                {task.text}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-800 text-lg">Agents & Tools</h3>
+                            <h3 className="font-bold text-slate-800 text-lg">Specialists (Optional)</h3>
                             <button className="text-slate-400 hover:text-primary transition-colors">
                                 <span className="material-symbols-outlined text-[20px]">grid_view</span>
                             </button>

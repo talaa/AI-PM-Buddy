@@ -5,16 +5,32 @@ from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings
 from database import supabase
+from rag_manager import RAGDocumentManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Embeddings
-embeddings_model = OllamaEmbeddings(
-    model="nomic-embed-text",
-    base_url="http://localhost:11434"
-)
+# Initialize RAG Manager Lazily
+rag_manager = None
+
+def get_rag_manager():
+    global rag_manager
+    if rag_manager is None:
+        rag_manager = RAGDocumentManager()
+    return rag_manager
+
+# Initialize Embeddings Lazily
+embeddings_model = None
+
+def get_embeddings_model():
+    global embeddings_model
+    if embeddings_model is None:
+        embeddings_model = OllamaEmbeddings(
+            model="nomic-embed-text",
+            base_url="http://localhost:11434"
+        )
+    return embeddings_model
 
 # Initialize Splitter
 text_splitter = RecursiveCharacterTextSplitter(
@@ -26,7 +42,9 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 async def process_and_store_document(document_id: str, file_path: str, metadata: Dict[str, Any] = None):
     """
-    Reads a file, chunks it, embeds it, and stores it in Supabase `document_chunks`.
+    Reads a file:
+    - If Excel/CSV: Ingests into SQLite.
+    - If PDF/Text: Chunks, embeds, and stores in Supabase `document_chunks`.
     """
     logger.info(f"Starting ingestion for document {document_id} at {file_path}")
     
@@ -35,15 +53,36 @@ async def process_and_store_document(document_id: str, file_path: str, metadata:
         return False
         
     try:
-        # 1. Extract Text
-        content = ""
         ext = os.path.splitext(file_path)[1].lower()
+        filename = os.path.basename(file_path)
+        
+        # --- PATH A: Structured Data (SQLite) ---
+        if ext in [".xlsx", ".xls", ".csv"]:
+            # Sanitize table name: filename without extension, alphanumeric only
+            table_name = os.path.splitext(filename)[0]
+            table_name = "".join([c if c.isalnum() else "_" for c in table_name])
+            
+            logger.info(f"Ingesting structured data into table: {table_name}")
+            logger.info(f"Ingesting structured data into table: {table_name}")
+            get_rag_manager().ingest_excel(file_path, table_name)
+            return True
+
+        # --- PATH B: Unstructured Data (Vector Store) ---
+        content = ""
         
         if ext == ".pdf":
-            reader = PdfReader(file_path)
-            for page in reader.pages:
-                content += page.extract_text() + "\n"
-        elif ext in [".txt", ".md", ".csv", ".json"]:
+            with open(file_path, "rb") as f:
+                reader = PdfReader(f)
+                for page in reader.pages:
+                    content += page.extract_text() + "\n"
+        elif ext in [".docx", ".doc"]:
+            # Lazy import to avoid dependency issues if not installed yet
+            import docx 
+            # Open file stream to ensure it's closed
+            with open(file_path, "rb") as f:
+                doc = docx.Document(f)
+                content = "\n".join([para.text for para in doc.paragraphs])
+        elif ext in [".txt", ".md", ".json"]:
              with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
         else:
@@ -54,34 +93,27 @@ async def process_and_store_document(document_id: str, file_path: str, metadata:
             logger.warning("Document content is empty.")
             return False
 
-        # 2. Split Text
+        # Split Text
         chunks = text_splitter.split_text(content)
         logger.info(f"Generated {len(chunks)} chunks from document.")
 
-        # 3. Embed and Prepare Records
+        # Embed and Prepare Records
         records = []
-        
-        # Batch embedding for efficiency? 
-        # langchain-ollama handles list inputs but let's do it explicitly if needed.
-        # embeddings = embeddings_model.embed_documents(chunks) 
-        
         for i, chunk in enumerate(chunks):
-            # Generate embedding
-            vector = embeddings_model.embed_query(chunk)
-            
+            vector = get_embeddings_model().embed_query(chunk)
             records.append({
                 "project_document_id": document_id,
                 "content": chunk,
                 "metadata": {
-                    "source": os.path.basename(file_path),
+                    "source": filename,
+                    "project_document_id": document_id,
                     "chunk_index": i,
                     **(metadata or {})
                 },
                 "embedding": vector
             })
             
-        # 4. Store in Supabase
-        # Insert in batches of 50 to avoid payload limits
+        # Store in Supabase
         batch_size = 50
         for i in range(0, len(records), batch_size):
             batch = records[i:i + batch_size]

@@ -24,7 +24,7 @@ class RAGManager:
     """Manage RAG functionality for knowledge bases"""
     
     def __init__(self, model_name: str = "qwen3:latest", embedding_model: str = "nomic-embed-text"):
-        self.llm = ChatOllama(model=model_name, temperature=0.3)
+        self.llm = ChatOllama(model=model_name, temperature=0.2)
         self.embeddings = OllamaEmbeddings(model=embedding_model)
         self.vectorstores: Dict[str, Chroma] = {}
     

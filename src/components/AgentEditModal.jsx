@@ -37,7 +37,7 @@ const AgentEditModal = ({ agent, onClose, onSaved }) => {
             tools: formData.tools,
         };
         try {
-            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/agents/${agent.id}`, {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/agents/${agent.id}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',

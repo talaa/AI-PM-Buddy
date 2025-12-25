@@ -96,7 +96,7 @@ def create_team_graph(agent_ids: List[str], context_files: List[str] = [], super
     # We use function calling / standard output parsing to determine the next step
     # Since Ollama json mode can be tricky, we'll use a robust text prompt approach.
     
-    supervisor_llm = ChatOllama(model=supervisor_model, temperature=0)
+    supervisor_llm = ChatOllama(model=supervisor_model, temperature=0, timeout=120.0)
     
     options = ["FINISH"] + members
     

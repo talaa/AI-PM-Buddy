@@ -27,7 +27,7 @@ def create_agent_graph(agent_config: AgentConfig):
     llm = ChatOllama(
         model=agent_config.model,
         base_url="http://localhost:11434",
-        # temperature=agent_config.temperature
+        temperature=.2
     )
     
     # Bind tools to the model

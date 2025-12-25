@@ -4,6 +4,7 @@ python-dotenv
 supabase
 ollama
 pydantic
+langfuse
 
 
 # LangChain dependencies
@@ -18,7 +19,13 @@ chromadb # Keep for local backup if needed
 tiktoken
 pypdf
 langchain-ollama
+pandas
+openpyxl
+sqlalchemy
+python-docx
 
 # Optional but recommended
 redis  # For production memory management
 langgraph
+requests
+beautifulsoup4

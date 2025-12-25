@@ -1,49 +1,17 @@
 import logging
 from typing import Dict, Any, List, Optional
-#from langchain_community.chat_models import ChatOllama
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, FunctionMessage, BaseMessage
-from langchain_core.output_parsers import StrOutputParser
 from schemas import AgentConfig
 from database import supabase
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
-# Store active chains per agent
-active_chains: Dict[str, Any] = {}
+# active_chains removed as we are moving to Deep Agents
 
-from agent_graph import create_agent_graph
 
-def create_langchain_agent(agent_config: AgentConfig):
-    """
-    Create a LangGraph agent with the given configuration.
-    (Kept name for compatibility, but returns a CompiledGraph)
-    """
-    logger.info(f"Creating LangGraph agent for: {agent_config.name}")
-    return create_agent_graph(agent_config)
+from functools import lru_cache
 
-def convert_history_to_messages(history: List[Dict[str, str]]) -> List[BaseMessage]:
-    """Convert history dict to LangChain message objects"""
-    messages = []
-    if not history:
-        return messages
-        
-    for msg in history:
-        role = msg.get('role', 'user').lower()
-        content = msg.get('content', '')
-        
-        if role == 'user':
-            messages.append(HumanMessage(content=content))
-        elif role == 'assistant':
-            messages.append(AIMessage(content=content))
-        elif role == 'system':
-            messages.append(SystemMessage(content=content))
-        elif role == 'function':
-            messages.append(FunctionMessage(name=msg.get('name', 'tool'), content=content))
-    
-    return messages
-
+@lru_cache(maxsize=32)
 def get_agent_config_by_id(agent_id: str) -> Optional[AgentConfig]:
     """Fetch agent details from Supabase and return AgentConfig"""
     if not supabase:
@@ -75,7 +43,7 @@ def get_agent_config_by_id(agent_id: str) -> Optional[AgentConfig]:
             name=agent_data.get('name', 'Assistant'),
             description=agent_data.get('description', 'AI Assistant'),
             instructions=agent_data.get('instructions', 'Provide helpful responses'),
-            knowledge=agent_data.get('knowledge'),
+            knowledge=agent_data.get('knowledge_path'), # Map DB 'knowledge_path' to config 'knowledge'
             tools=agent_data.get('tools', []),
             model=agent_data.get('model', 'qwen3:latest'),
             #temperature=agent_data.get('temperature', 0.7),

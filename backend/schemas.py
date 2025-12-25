@@ -22,7 +22,7 @@ class AgentConfig(BaseModel):
     knowledge: Optional[str] = None
     tools: Optional[List[str]] = []
     model: str = "qwen3:latest"
-    #temperature: float = 0.7
+    temperature: float = 0.2
     #max_tokens: int = 2000
     modified_at: Optional[datetime] = None
 
@@ -34,7 +34,7 @@ class UpdateAgent(BaseModel):
     knowledge: Optional[str] = None
     tools: Optional[List[str]] = None
     model: Optional[str] = None
-    #temperature: Optional[float] = None
+    temperature: Optional[float] = None
     #max_tokens: Optional[int] = None
 
 class FolderCreationRequest(BaseModel):
